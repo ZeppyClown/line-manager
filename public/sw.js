@@ -1,5 +1,5 @@
 // Caches the team game so "/?offline" still loads when the Wi-Fi is down.
-const CACHE = 'line-manager-v6';
+const CACHE = 'line-manager-v7';
 const FILES = ['/', '/style.css', '/map.css', '/engine.js', '/map.js', '/fx.js', '/tutorial.js', '/tutorial.css', '/team.js'];
 
 self.addEventListener('install', (e) => {
@@ -15,8 +15,7 @@ self.addEventListener('fetch', (e) => {
   // Network first (so updates arrive), cache as fallback.
   e.respondWith(
     fetch(e.request).then((res) => {
-      const copy = res.clone();
-      caches.open(CACHE).then((c) => c.put(url.pathname, copy));
+      if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(url.pathname, copy)); }
       return res;
     }).catch(() => caches.match(url.pathname))
   );

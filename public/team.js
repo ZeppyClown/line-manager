@@ -103,7 +103,7 @@
   // One live tab per laptop: the newest tab takes over, older ones pause.
   if (tabs) tabs.onmessage = (e) => {
     if (e.data && e.data.type === 'claim' && e.data.tabId !== tabId && !inactive) {
-      inactive = true; dec = null; cancelSim();
+      inactive = true; dec = null; cancelSim(); destroyTut(); stopCountdownOverlay();
       if (ws) { const old = ws; old.onclose = null; try { old.close(); } catch (_) {} ws = null; wsOpen = false; }
       screenKey = ''; renderInactive();
     }
@@ -113,7 +113,13 @@
     main.innerHTML = `<div class="center"><div class="card pop"><h1 class="brand" style="font-size:34px">Open in another tab</h1>
       <p>This team is being played in another browser tab. Use that one, or continue here.</p>
       <button class="btn-primary" id="useHere">Use this tab</button></div></div>`;
-    $('#useHere').onclick = () => { inactive = false; claimTab(); restore(); screenKey = ''; if (OFFLINE) render(); else connect(); };
+    $('#useHere').onclick = (e) => {
+      e.currentTarget.disabled = true;
+      inactive = false; claimTab(); restore(); screenKey = '';
+      if (OFFLINE) return render();
+      if (ws) { const old = ws; old.onclose = null; try { old.close(); } catch (_) {} ws = null; wsOpen = false; }
+      connect(); render();
+    };
   }
 
   function onMsg(msg) {
@@ -132,6 +138,11 @@
         if (!roundOpen || localChoices[r].slice(0, s.length).join() !== s.join()) localChoices[r] = s.slice();
       }
       pending = pending.filter((p) => msg.phase === PLAY_PHASE[p.round] && msg.you.rounds[p.round].choices.length <= p.idx);
+      // Tutorial finished while offline? Tell the server now.
+      if (msg.phase === 'lobby' && !msg.you.ready && seen('tut-' + msg.you.id)) sendReady();
+      // The Round 2 rule timer belongs to this visit to Round 2 only.
+      if (msg.phase !== 'r2' && !msg.you.rule) { localRule = null; ruleStartedAt = null; }
+      if (msg.phase === 'r2' && localRule && !msg.you.rule && ws && wsOpen) ws.send(JSON.stringify({ type: 'rule', rule: localRule }));
       if (sim) {
         const sc = msg.you.rounds[sim.round].choices[sim.idx];
         if (sc && sc !== sim.step.choice) { cancelSim(); notice = 'The host ended the round before your last click arrived, so nothing was bought.'; }
@@ -152,7 +163,7 @@
 
   function flush() {
     if (OFFLINE || inactive || !wsOpen || !joined) return;
-    if (localRule && srv && srv.you && !srv.you.rule && srv.phase === 'r2') ws.send(JSON.stringify({ type: 'rule', rule: localRule }));
+    if (localRule && !(srv && srv.you && srv.you.rule)) ws.send(JSON.stringify({ type: 'rule', rule: localRule }));
     for (const p of pending) ws.send(JSON.stringify(p));
   }
 
@@ -222,6 +233,7 @@
     if (srv && sim && sim.round !== playRound()) cancelSim();
     if (srv && dec && dec.round !== playRound()) { dec = null; persist(); }
     if (srv && srv.phase !== 'lobby') destroyTut();
+    if (screenKey.startsWith('count-') && srv && playRound() == null) stopCountdownOverlay();
     if (!srv || !srv.you) { key = 'join'; fn = renderJoin; }
     else if (srv.phase === 'lobby') {
       const needTut = window.LMTutorial && !srv.you.ready && !seen('tut-' + srv.you.id);
@@ -281,17 +293,22 @@
     if (tut) return;
     main.innerHTML = '<div class="tut-mount"></div>';
     const id = srv.you.id;
+    try {
     tut = window.LMTutorial.start(main.querySelector('.tut-mount'), {
       teamName: srv.you.name,
       fx: window.FX,
       onDone: () => {
         markSeen('tut-' + id);
-        if (OFFLINE) { srv.you.ready = true; tut = null; return offlineAdvance('r1'); }
-        if (ws && wsOpen) ws.send('{"type":"ready"}');
-        tut = null; screenKey = ''; render();
+        setTimeout(destroyTut, 0);   // let the tutorial finish its own click handler first
+        if (OFFLINE) { srv.you.ready = true; return setTimeout(() => offlineAdvance('r1'), 0); }
+        sendReady();
+        setTimeout(() => { screenKey = ''; render(); }, 0);
       },
     });
+    } catch (_) { tut = null; markSeen('tut-' + id); sendReady(); screenKey = ''; return renderLobby(); }
   }
+  function sendReady() { if (ws && wsOpen && joined) ws.send('{"type":"ready"}'); }
+  function stopCountdownOverlay() { document.querySelectorAll('.fx-cd').forEach((el) => { try { el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true })); } catch (_) { el.remove(); } }); }
 
   function renderCountdown(r) {
     setHeader();
@@ -356,7 +373,8 @@
   }
 
   // ================= factory map UI (renderer lives in map.js) =================
-  const { renderMap, wireMap: wireMapRound } = window.LMUI;
+  const renderMap = (...a) => (window.LMUI ? window.LMUI.renderMap(...a) : '<p style="color:#fff;padding:20px">Map failed to load. Refresh the page.</p>');
+  const wireMapRound = (...a) => { if (window.LMUI) window.LMUI.wireMap(...a); };
   function mapSVG(r, st, opts = {}) { return renderMap(ROUNDS[r], st, { ...opts, nudges: r === 1, key: 'r' + r }); }
   function wireMap(r, st) { return wireMapRound(ROUNDS[r], st, r === 1, $('.mapwrap')); }
 
@@ -556,7 +574,7 @@
     const { round: r, idx } = dec;
     const o = ROUNDS[r].offers[idx];
     fx.sound(choice === 'A' ? 'buy' : (r === 1 && o.sunk && !timedOut ? 'scrap' : 'click'));
-    const msg = { type: 'decide', round: r, idx, choice, prediction: dec.prediction, timedOut, ms: Date.now() - dec.startedAt };
+    const msg = { type: 'decide', round: r, idx, choice, prediction: dec.prediction, timedOut, ms: Date.now() - dec.startedAt, rule: r === 1 ? ruleFor() : undefined };
     dec = null;
     localChoices[r] = choicesFor(r).slice(0, idx).concat(choice);
     if (OFFLINE) offlineApply(msg); else { pending.push(msg); persist(); flush(); }

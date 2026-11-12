@@ -144,7 +144,7 @@ function handleTeam(ws, msg) {
   if (msg.type === 'rule') {
     // Round 2 rule card (implementation intention). Set once, before the first Round 2 decision.
     const t = game.teams.find(x => x.id === ws.teamId);
-    if (!t || game.phase !== 'r2' || t.rule || t.rounds[1].choices.length) return broadcast();
+    if (!t || game.phase !== 'r2' || t.rule) return broadcast();
     if (!RULES.includes(msg.rule)) return;
     t.rule = msg.rule; saveNow();
     return broadcast();
@@ -160,6 +160,7 @@ function handleTeam(ws, msg) {
     if (idx !== r.choices.length || idx > 2) return broadcast(); // duplicate/out of order: resync client
     if (msg.choice !== 'A' && msg.choice !== 'B') return;
     r.choices.push(msg.choice);
+    if (ri === 1 && !t.rule && RULES.includes(msg.rule)) t.rule = msg.rule; // backup in case the rule message was lost
     r.predictions[idx] = msg.prediction === 'yes' || msg.prediction === 'no' ? msg.prediction : null;
     r.timedOut[idx] = !!msg.timedOut;
     r.ms[idx] = Math.max(0, Math.min(600000, Number(msg.ms) || 0));

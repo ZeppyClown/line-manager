@@ -106,4 +106,4 @@ Synthesised sound effects with a mute toggle (click, coin, buy, scrap, last-5-se
 badge), 3-2-1 countdown at round start, coins popping from Sell during the simulation, confetti at round end and on the
 final podium, end-of-game badges on the Bias Mirror (e.g. Cold Blooded: scrapped every sunk-cost offer in Round 2;
 Bottleneck Hunter: took the good upgrade in both rounds; Oracle: every prediction right; Quick Draw: average decision
-under 10 s; Comeback: closer to perfect in Round 2 than Round 1; Perfect Shift: matched the ghost manager).
+under 10 s; Comeback: closer to perfect in Round 2 than Round 1; Ghost Buster: matched the ghost manager).
