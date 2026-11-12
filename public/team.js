@@ -26,16 +26,32 @@
   let lastMsgAt = Date.now();
   const tabId = Math.random().toString(36).slice(2);
   const tabs = 'BroadcastChannel' in window ? new BroadcastChannel('lm-tabs') : null;
+  let localRule = null;      // Round 2 rule card choice (until the server confirms)
+  let ruleStartedAt = null;
+  let tut = null;            // running tutorial instance
+  let celebrate = false;     // play the round-complete effects once, right after the last animation
+  const RULE_SECONDS = 20;
+  // Optional fun layer (fx.js). Every call is guarded so the game works without it.
+  const fx = {
+    sound: (n) => { try { window.FX && FX.sound && FX.sound(n); } catch (_) {} },
+    confetti: (o) => { try { window.FX && FX.confetti && FX.confetti(o); } catch (_) {} },
+    coin: (x, y, t) => { try { window.FX && FX.coinPop && FX.coinPop(x, y, t); } catch (_) {} },
+    toast: (t, o) => { try { window.FX && FX.toast && FX.toast(t, o); } catch (_) {} },
+    pulse: (el) => { try { window.FX && FX.pulse && el && FX.pulse(el); } catch (_) {} },
+    countdown: () => { try { if (window.FX && FX.countdown) return FX.countdown(['3', '2', '1', 'Go!']); } catch (_) {} return Promise.resolve(); },
+  };
+  const seen = (k) => { try { return sessionStorage.getItem('lm-seen-' + k) === '1'; } catch (_) { return false; } };
+  const markSeen = (k) => { try { sessionStorage.setItem('lm-seen-' + k, '1'); } catch (_) {} };
 
   // Persist in-flight work so a refresh mid-decision keeps the clock, prediction and unsent choices.
   function persist() {
     if (inactive) return;
-    if (OFFLINE) { try { localStorage.setItem(OFFLINE_KEY, JSON.stringify({ srv, dec })); } catch (_) {} return; }
-    try { localStorage.setItem(LOCAL_KEY, JSON.stringify({ teamId: localStorage.getItem(LS_KEY), pending, localChoices, dec })); } catch (_) {}
+    if (OFFLINE) { try { localStorage.setItem(OFFLINE_KEY, JSON.stringify({ srv, dec, ruleStartedAt })); } catch (_) {} return; }
+    try { localStorage.setItem(LOCAL_KEY, JSON.stringify({ teamId: localStorage.getItem(LS_KEY), pending, localChoices, dec, localRule, ruleStartedAt })); } catch (_) {}
   }
   function restore() {
     if (OFFLINE) {
-      try { const d = JSON.parse(localStorage.getItem(OFFLINE_KEY) || 'null'); if (d && d.srv && d.srv.you) { srv = d.srv; dec = d.dec || null; } } catch (_) {}
+      try { const d = JSON.parse(localStorage.getItem(OFFLINE_KEY) || 'null'); if (d && d.srv && d.srv.you) { srv = d.srv; dec = d.dec || null; ruleStartedAt = d.ruleStartedAt || null; } } catch (_) {}
       return;
     }
     try {
@@ -44,6 +60,7 @@
       pending = Array.isArray(d.pending) ? d.pending : [];
       localChoices = Array.isArray(d.localChoices) && d.localChoices.length === 2 ? d.localChoices : [[], []];
       dec = d.dec && typeof d.dec.startedAt === 'number' ? d.dec : null;
+      localRule = d.localRule || null; ruleStartedAt = d.ruleStartedAt || null;
     } catch (_) {}
   }
   function joinKey() {
@@ -128,11 +145,13 @@
     }
   }
 
-  function resetLocal() { localChoices = [[], []]; pending = []; dec = null; cancelSim(); }
+  function resetLocal() { localChoices = [[], []]; pending = []; dec = null; localRule = null; ruleStartedAt = null; cancelSim(); destroyTut(); }
+  function destroyTut() { if (tut) { try { tut.destroy(); } catch (_) {} tut = null; } }
   function cancelSim() { sim = null; simSeq++; clearTimeout(simTimer); }
 
   function flush() {
     if (OFFLINE || inactive || !wsOpen || !joined) return;
+    if (localRule && srv && srv.you && !srv.you.rule && srv.phase === 'r2') ws.send(JSON.stringify({ type: 'rule', rule: localRule }));
     for (const p of pending) ws.send(JSON.stringify(p));
   }
 
@@ -153,7 +172,7 @@
   }
   function offlineJoin(name, condChoice) {
     const cond = (condChoice || params.get('cond')) === 'tag' ? 'tag' : 'control';
-    srv = { phase: 'r1', you: { id: 'offline', num: 1, name, condition: cond, rounds: [rec(), rec()] }, teamCount: 1 };
+    srv = { phase: 'lobby', you: { id: 'offline', num: 1, name, condition: cond, rule: null, ready: false, rounds: [rec(), rec()] }, teamCount: 1 };
     function rec() { return { choices: [], predictions: [], timedOut: [], ms: [], forced: [] }; }
     persist(); render();
   }
@@ -164,6 +183,7 @@
   }
   function offlineAdvance(phase) {
     srv.phase = phase;
+    if (phase === 'r2') ruleStartedAt = null;
     if (phase === 'final') {
       const total = srv.you.rounds.reduce((s, r, i) => s + LM.simulate(i, r.choices).cash, 0);
       srv.rank = 1; srv.leaderboard = [{ num: 1, name: srv.you.name, total, rank: 1 }];
@@ -180,12 +200,17 @@
   function predictionsFor(r) { return (srv && srv.you && srv.you.rounds[r].predictions) || []; }
   function playRound() { return srv && srv.phase === 'r1' ? 0 : srv && srv.phase === 'r2' ? 1 : null; }
   function showTag(r) { return r === 1 || (srv && srv.you.condition === 'tag'); }
+  function ruleFor() { return (srv && srv.you && srv.you.rule) || localRule; }
+  function ruleInfo(id) { return LM.RULES.find((x) => x.id === id); }
 
   // ---------- header ----------
   function setHeader() {
     const you = srv && srv.you;
     const pill = $('#teamPill');
     if (you) { pill.textContent = `Team ${you.num} · ${you.name}`; pill.classList.remove('hidden'); } else pill.classList.add('hidden');
+    if (window.FX && FX.muteButton && !document.querySelector('header.top .fx-mute-slot')) {
+      try { const slot = document.createElement('span'); slot.className = 'fx-mute-slot'; slot.appendChild(FX.muteButton()); $('header.top').appendChild(slot); } catch (_) {}
+    }
     updateConn();
   }
 
@@ -195,22 +220,29 @@
     let key, fn;
     if (srv && sim && sim.round !== playRound()) cancelSim();
     if (srv && dec && dec.round !== playRound()) { dec = null; persist(); }
+    if (srv && srv.phase !== 'lobby') destroyTut();
     if (!srv || !srv.you) { key = 'join'; fn = renderJoin; }
-    else if (srv.phase === 'lobby') { key = 'lobby'; fn = renderLobby; }
+    else if (srv.phase === 'lobby') {
+      const needTut = window.LMTutorial && !srv.you.ready && !seen('tut-' + srv.you.id);
+      if (needTut || tut) { key = 'tutorial'; fn = renderTutorial; } else { key = 'lobby'; fn = renderLobby; }
+    }
     else if (playRound() != null) {
       const r = playRound();
       const n = choicesFor(r).length;
       if (sim && sim.round === r) { key = `sim-${r}-${sim.idx}`; fn = renderSim; }
       else if (n >= 3) { dec = null; key = `done-${r}-${choicesFor(r).join('')}`; fn = () => renderDone(r); }
+      else if (n === 0 && !dec && !seen(`count-${srv.you.id}-${r}`) && window.FX && FX.countdown) { key = `count-${r}`; fn = () => renderCountdown(r); }
+      else if (r === 1 && n === 0 && !ruleFor()) { key = 'rule'; fn = renderRule; }
       else {
         if (!dec || dec.round !== r || dec.idx !== n) { dec = { round: r, idx: n, stage: r === 1 ? 'predict' : 'choose', prediction: null, startedAt: Date.now() }; persist(); }
         key = `dec-${r}-${n}-${dec.stage}`; fn = renderDecision;
       }
     } else if (srv.phase === 'final') { key = 'final-' + JSON.stringify([choicesFor(0), choicesFor(1), srv.rank, srv.leaderboard]); fn = renderFinal; }
     else { key = 'reveal-' + srv.phase + '-' + choicesFor(0).join('') + choicesFor(1).join(''); fn = renderReveal; }
-    document.body.classList.toggle('playing', /^(dec|sim|done)-/.test(key));
+    document.body.classList.toggle('playing', /^(dec|sim|done)-|^rule$/.test(key));
     if (key !== screenKey || force) { screenKey = key; fn(); }
     else if (key === 'lobby') fn();
+    else if (key === 'rule') updateRuleBadge();
   }
 
   function renderJoin() {
@@ -243,16 +275,79 @@
     };
   }
 
+  function renderTutorial() {
+    setHeader();
+    if (tut) return;
+    main.innerHTML = '<div class="tut-mount"></div>';
+    const id = srv.you.id;
+    tut = window.LMTutorial.start(main.querySelector('.tut-mount'), {
+      teamName: srv.you.name,
+      fx: window.FX,
+      onDone: () => {
+        markSeen('tut-' + id);
+        if (OFFLINE) { srv.you.ready = true; tut = null; return offlineAdvance('r1'); }
+        if (ws && wsOpen) ws.send('{"type":"ready"}');
+        tut = null; screenKey = ''; render();
+      },
+    });
+  }
+
+  function renderCountdown(r) {
+    setHeader();
+    main.innerHTML = `<div class="center"><div class="card pop"><div class="pill" style="margin-bottom:10px">${ROUNDS[r].title}</div><h1 class="brand" style="font-size:40px">Get ready…</h1></div></div>`;
+    const id = srv.you.id;
+    fx.countdown().then(() => { markSeen(`count-${id}-${r}`); fx.sound('roundStart'); screenKey = ''; render(); });
+  }
+
+  function renderRule() {
+    setHeader();
+    if (!ruleStartedAt) { ruleStartedAt = Date.now(); persist(); }
+    const st = LM.initialState(ROUNDS[1]);
+    const right = `
+      <div class="panel offer rulecard pop">
+        <div class="timer" id="ruleTimer"></div>
+        <div class="kicker"><span>Before Round 2</span><span class="secs"><span id="ruleSecs">${RULE_SECONDS}</span>s</span></div>
+        <h3>Set your team's rule</h3>
+        <p class="blurb">Agree one rule now. We'll pin it to every offer this round.</p>
+        <div class="rules">${LM.RULES.map((x) => `<button class="rulebtn" data-rule="${x.id}"><span class="pin">📌</span><span>${esc(x.label)}</span></button>`).join('')}</div>
+      </div>`;
+    shell(1, { hour: 0, cash: START_CASH, upto: 0, right, map: mapSVG(1, st) });
+    wireMap(1, st);
+    main.querySelectorAll('[data-rule]').forEach((b) => b.onclick = () => pickRule(b.dataset.rule));
+    updateRuleBadge();
+  }
+  function updateRuleBadge() {
+    if (!ruleStartedAt) return;
+    const left = RULE_SECONDS * 1000 - (Date.now() - ruleStartedAt);
+    const el = $('#ruleTimer'), t = $('#ruleSecs');
+    if (el) el.style.width = Math.max(0, left / (RULE_SECONDS * 10)) + '%';
+    if (t) t.textContent = Math.max(0, Math.ceil(left / 1000));
+  }
+  function pickRule(id) {
+    if (ruleFor() || playRound() !== 1) return;
+    fx.sound(id === 'none' ? 'click' : 'badge');
+    if (OFFLINE) { srv.you.rule = id; persist(); }
+    else { localRule = id; persist(); if (ws && wsOpen) ws.send(JSON.stringify({ type: 'rule', rule: id })); }
+    screenKey = ''; render();
+  }
+  setInterval(() => {
+    if (screenKey !== 'rule' || inactive) return;
+    updateRuleBadge();
+    if (ruleStartedAt && Date.now() - ruleStartedAt > RULE_SECONDS * 1000) pickRule('none');
+  }, 250);
+
   function renderLobby() {
     setHeader();
     main.innerHTML = `
       <div class="center"><div class="card pop">
         <div class="pill" style="margin-bottom:14px">Team ${srv.you.num}</div>
         <h1 class="brand" style="font-size:44px">${esc(srv.you.name)}</h1>
-        <p>You're in. Waiting for the host to start Round 1.</p>
+        <p>${srv.you.ready || seen('tut-' + srv.you.id) ? '✅ Tutorial done. ' : ''}${OFFLINE ? 'Offline mode: start when you are ready.' : "You're in. Waiting for the host to start Round 1."}</p>
         <p class="muted" style="font-size:15px">${srv.teamCount} team${srv.teamCount === 1 ? '' : 's'} joined · Each round: 3 decisions, ${DECISION_SECONDS} seconds each. Highest cash wins.</p>
         <p class="muted" style="font-size:13px;margin-top:10px">Tip: press F11 (Ctrl+Cmd+F on Mac) for full screen</p>
+        ${OFFLINE ? '<button class="btn-orange" id="offStart" style="margin-top:12px">Start Round 1</button>' : ''}
       </div></div>`;
+    const os = $('#offStart'); if (os) os.onclick = () => offlineAdvance('r1');
   }
 
   // ================= factory map UI (renderer lives in map.js) =================
@@ -280,15 +375,22 @@
     return st;
   }
 
-  function sparkSVG(r, hour) {
+  // ghost = show the "ghost manager" (perfect play) line too. Only used once the team's round is over.
+  function sparkSVG(r, hour, ghost = false, choices = null) {
     const W = 210, H = 54;
     const pts = [];
     const max = Math.max(LM.bestChoices(r).cash, START_CASH) * 1.05, min = 0;
-    for (let h = 0; h <= Math.min(hour, SHIFT_HOURS) + 1e-9; h += 0.5) pts.push([h, cashAt(r, h)]);
+    const own = choices ? LM.cashPath(r, choices) : null;
+    for (let h = 0; h <= Math.min(hour, SHIFT_HOURS) + 1e-9; h += 0.5) pts.push([h, own ? own[Math.round(h * 2)][1] : cashAt(r, h)]);
     if (pts.length && pts[pts.length - 1][0] < hour) pts.push([hour, cashAt(r, hour)]);
-    const xy = pts.map(([h, c]) => `${(h / SHIFT_HOURS * W).toFixed(1)},${(H - (c - min) / (max - min) * H).toFixed(1)}`).join(' ');
+    const toXY = (arr) => arr.map(([h, c]) => `${(h / SHIFT_HOURS * W).toFixed(1)},${(H - (c - min) / (max - min) * H).toFixed(1)}`).join(' ');
     const ticks = CHECKPOINTS.slice(1).map((h) => `<line x1="${h / SHIFT_HOURS * W}" x2="${h / SHIFT_HOURS * W}" y1="0" y2="${H}" class="tick"/>`).join('');
-    return `<svg viewBox="0 0 ${W} ${H}" class="spark" preserveAspectRatio="none">${ticks}<polyline points="${xy}" /></svg>`;
+    const g = ghost ? `<polyline class="ghost" points="${toXY(LM.cashPath(r, LM.bestChoices(r).choices).filter(([h]) => h <= hour + 1e-9))}"/>` : '';
+    return `<svg viewBox="0 0 ${W} ${H}" class="spark" preserveAspectRatio="none">${ticks}${g}<polyline points="${toXY(pts)}" /></svg>`;
+  }
+  function ghostLegend(r, yourCash) {
+    const best = LM.bestChoices(r).cash, gap = best - yourCash;
+    return `<div class="ghostleg"><span><i class="you"></i>You ${usd(yourCash)}</span><span><i class="gh"></i>👻 Ghost ${usd(best)}</span>${gap > 0 ? `<b>Gap ${usd(gap)}</b>` : '<b class="tie">You matched the ghost!</b>'}</div>`;
   }
 
   function logHTML(r, upto, deciding) {
@@ -304,7 +406,7 @@
     }).join('');
   }
 
-  function shell(r, { hour, cash, upto, right, map, replay = false, deciding = false }) {
+  function shell(r, { hour, cash, upto, right, map, replay = false, deciding = false, ghost = false }) {
     const round = ROUNDS[r];
     const runs = [0, 1].map((ri) => {
       const ch = choicesFor(ri);
@@ -322,7 +424,8 @@
             <div class="clockrow"><span id="clockLabel">Hour ${Math.floor(hour)} of ${SHIFT_HOURS}</span></div>
             <div class="clockbar"><div id="clockFill" style="width:${hour / SHIFT_HOURS * 100}%"></div></div>
             <div class="cashrow"><small>Cash</small><b id="cash">${usd(cash)}</b></div>
-            <div id="spark">${sparkSVG(r, hour)}</div>
+            <div id="spark">${sparkSVG(r, hour, ghost)}</div>
+            ${ghost ? ghostLegend(r, LM.simulate(r, choicesFor(r)).cash) : ''}
             ${replay ? `<div class="replay"><input type="range" id="scrub" min="0" max="24" step="0.5" value="${hour}"><div class="rbtns"><button class="btn-ghost sm" id="rFirst">⏮ First</button><button class="btn-primary sm" id="rPlay">▶ Replay</button></div></div>` : ''}
           </section>
           <section class="panel log"><div class="eyebrow">Shift log</div><ol>${logHTML(r, upto, deciding)}</ol></section>
@@ -333,12 +436,12 @@
       </div>`;
   }
 
-  function setClock(r, hour, cash) {
+  function setClock(r, hour, cash, ghost = false) {
     const l = $('#clockLabel'), f = $('#clockFill'), c = $('#cash'), sp = $('#spark');
     if (l) l.textContent = `Hour ${Math.floor(hour)} of ${SHIFT_HOURS}`;
     if (f) f.style.width = (hour / SHIFT_HOURS * 100) + '%';
     if (c) c.textContent = usd(cash);
-    if (sp) sp.innerHTML = sparkSVG(r, hour);
+    if (sp) sp.innerHTML = sparkSVG(r, hour, ghost);
   }
 
   function stateAt(r, idx) {
@@ -351,6 +454,14 @@
     if (e.saving) return `Saves ${usd(e.saving)}/hr in running costs`;
     const m = round.machines.find((x) => x.id === e.machine);
     return `${m.name}: ${st.rates[e.machine]} → ${st.rates[e.machine] + e.rate} /hr`;
+  }
+
+  // Nudge 6, money translation: say what the effect is worth in dollars per hour (Round 2).
+  function worthRow(round, st, ev) {
+    if (ev.gain > 0) return `<div class="row worth good"><span>Worth</span><b>+${usd(ev.gain)}/hr</b></div>`;
+    const after = LM.applyEffect(st, ev.offer.effect);
+    const lim = LM.bottleneckIds(round, after).map((id) => round.machines.find((m) => m.id === id).name).join(' & ');
+    return `<div class="row worth zero"><span>Worth</span><b>+$0/hr <small>${esc(lim)} still limits the line</small></b></div>`;
   }
 
   function tagHTML(ev) {
@@ -394,16 +505,19 @@
           ${o.sunk ? `<div class="row sunk"><span>Already spent</span><b>${usd(o.sunk)}</b></div>` : ''}
           <div class="row"><span>Cost now</span><b>${usd(o.cost)}</b></div>
           <div class="row"><span>Effect</span><b>${esc(effectText(round, st, o))}</b></div>
+          ${r === 1 ? worthRow(round, st, ev) : ''}
         </div>
         ${tagOn ? tagHTML(ev) : ''}
         ${r === 1 && o.sunk && !predictStage ? `<div class="newmgr pop"><div class="face">🧑‍💼</div><div><b>New Manager check</b>A new manager with no history walks in. The ${usd(o.sunk)} is gone either way. Would <i>they</i> pay ${usd(o.cost)}?</div></div>` : ''}
       </div>
       <div class="panel actions pop">
         ${predictStage ? `
+          ${r === 1 && ruleFor() && ruleFor() !== 'none' ? `<div class="rulechip">📌 Your rule: <b>${esc(ruleInfo(ruleFor()).short)}</b></div>` : ''}
           <h4>Predict first</h4>
           <p>Before you see the payback tag: will this pay back before the shift ends?</p>
           <div class="predict-row"><button class="btn-ghost" data-pred="yes">Yes</button><button class="btn-ghost" data-pred="no">No</button></div>` : `
           ${guess}
+          ${r === 1 && ruleFor() && ruleFor() !== 'none' ? `<div class="rulechip">📌 Your rule: <b>${esc(ruleInfo(ruleFor()).short)}</b></div>` : ''}
           <div class="choices">
             <button class="btn-primary" data-choice="A"><span>Invest ${usd(o.cost)}</span><small>Pay now</small></button>
             ${scrap
@@ -414,7 +528,7 @@
       </div>`;
     shell(r, { hour: CHECKPOINTS[idx], cash, upto: idx, right, deciding: true, map: mapSVG(r, st, { target: o.effect.machine }) });
     wireMap(r, st);
-    main.querySelectorAll('[data-pred]').forEach((b) => b.onclick = () => { dec.prediction = b.dataset.pred; dec.stage = 'choose'; persist(); render(); });
+    main.querySelectorAll('[data-pred]').forEach((b) => b.onclick = () => { fx.sound('click'); dec.prediction = b.dataset.pred; dec.stage = 'choose'; persist(); render(); });
     main.querySelectorAll('[data-choice]').forEach((b) => b.onclick = () => choose(b.dataset.choice, false));
     tickTimer();
   }
@@ -425,6 +539,8 @@
     const left = DECISION_SECONDS * 1000 - (Date.now() - dec.startedAt);
     if (el) { el.style.width = Math.max(0, left / (DECISION_SECONDS * 10)) + '%'; el.classList.toggle('low', left < 10000); }
     const t = $('#secs'); if (t) { t.textContent = Math.max(0, Math.ceil(left / 1000)); t.parentNode.classList.toggle('low', left < 10000); }
+    const sec = Math.ceil(left / 1000);
+    if (sec <= 5 && sec >= 1 && dec.lastTick !== sec) { dec.lastTick = sec; fx.sound('tick'); }
     if (left <= 0) choose('B', true);
   }
   setInterval(tickTimer, 250);
@@ -433,6 +549,8 @@
     if (!dec || inactive || dec.round !== playRound()) return;
     notice = '';
     const { round: r, idx } = dec;
+    const o = ROUNDS[r].offers[idx];
+    fx.sound(choice === 'A' ? 'buy' : (r === 1 && o.sunk && !timedOut ? 'scrap' : 'click'));
     const msg = { type: 'decide', round: r, idx, choice, prediction: dec.prediction, timedOut, ms: Date.now() - dec.startedAt };
     dec = null;
     localChoices[r] = choicesFor(r).slice(0, idx).concat(choice);
@@ -458,11 +576,16 @@
     const hour = h0 + (h1 - h0) * p;
     const cash = sim.from + (sim.to - sim.from) * p;
     setClock(sim.round, hour, cash);
+    if (now - (sim.lastCoin || 0) > 260 && sim.step.perHour > 0) {
+      sim.lastCoin = now;
+      const sell = document.querySelector('.map .sell');
+      if (sell) { const b = sell.getBoundingClientRect(); fx.coin(b.left + b.width / 2 + (Math.random() * 30 - 15), b.top + 4, '+' + usd(ROUNDS[sim.round].price)); fx.sound('coin'); }
+    }
     const big = $('#simHour'), earned = $('#simEarned');
     if (big) big.textContent = `${String(Math.floor(hour)).padStart(2, '0')}:00`;
     if (earned) earned.textContent = '+' + usd((sim.to - sim.from) * p);
     if (p < 1) requestAnimationFrame((t) => animate(t, id));
-    else simTimer = setTimeout(() => { if (sim && sim.id === id) { sim = null; render(); } }, 450);
+    else simTimer = setTimeout(() => { if (sim && sim.id === id) { if (sim.idx === 2) celebrate = true; sim = null; render(); } }, 450);
   }
 
   function renderSim() {
@@ -494,17 +617,26 @@
         <div class="kicker">Shift complete</div>
         <div class="final">${usd(s.cash)}</div>
         <p class="muted">${units} ${ROUNDS[r].product}s made and sold</p>
+        <div class="ghostbox">${LM.bestChoices(r).cash > s.cash
+          ? `👻 The <b>ghost manager</b> made <b>${usd(LM.bestChoices(r).cash)}</b> in this factory. You were <b>${usd(LM.bestChoices(r).cash - s.cash)}</b> behind. Press <b>Replay</b> to race it.`
+          : `👻 You matched the <b>ghost manager</b>, the best possible score. Flawless!`}</div>
         ${notice ? `<p class="guess wrong">${esc(notice)}</p>` : ''}
         <p>${OFFLINE ? 'Drag the timeline on the left to replay your shift.' : 'Waiting for the other teams. Eyes on the big screen.'}</p>
         ${offlineNext}
       </div>`;
-    shell(r, { hour: SHIFT_HOURS, cash: s.cash, upto: 3, right, map: mapSVG(r, s.state), replay: true });
+    shell(r, { hour: SHIFT_HOURS, cash: s.cash, upto: 3, right, map: mapSVG(r, s.state), replay: true, ghost: true });
+    if (celebrate) {
+      celebrate = false;
+      fx.sound('complete');
+      const perfect = s.cash >= LM.bestChoices(r).cash;
+      fx.confetti(perfect ? { count: 220 } : { count: 90 });
+    }
     wireMap(r, s.state);
     const n = $('#next'); if (n) n.onclick = () => offlineAdvance(r === 0 ? 'r2' : 'final');
     const scrub = $('#scrub');
     let lastSt = '';
     const show = (h) => {
-      setClock(r, h, cashAt(r, h)); scrub.value = h;
+      setClock(r, h, cashAt(r, h), true); scrub.value = h;
       const st = stateAtHour(r, h); const k = JSON.stringify(st);
       if (k !== lastSt) { lastSt = k; $('.mapwrap').innerHTML = mapSVG(r, st); wireMap(r, st); }
     };
@@ -531,6 +663,7 @@
   }
 
   function renderFinal() {
+    setTimeout(showBadgeToasts, 50);
     const rounds = [0, 1].map((r) => {
       const rec = srv.you.rounds[r];
       const m = LM.mirror(r, choicesFor(r)).map((d) => {
@@ -552,13 +685,14 @@
     setHeader({ cash: total });
     const col = (x) => `
       <div class="card pop">
-        <h3><span>${ROUNDS[x.r].title}</span><span>${played(x) ? usd(x.cash) : '–'} <small class="muted" style="font-size:13px">/ best ${usd(x.best)}</small></span></h3>
-        ${played(x) ? '' : '<p class="muted">Your team did not play this round.</p>'}
+        <h3><span>${ROUNDS[x.r].title}</span><span>${played(x) ? usd(x.cash) : '–'} <small class="muted" style="font-size:13px">/ 👻 ${usd(x.best)}</small></span></h3>
+        ${played(x) ? `<div class="mirrorspark">${sparkSVG(x.r, SHIFT_HOURS, true, choicesFor(x.r))}</div>` : '<p class="muted">Your team did not play this round.</p>'}
         ${x.m.map((d) => `
           <div class="mi"><div class="mark ${d.ok == null ? 'na' : d.ok ? 'ok' : 'no'}">${d.ok == null ? '–' : d.ok ? '✓' : '✗'}</div>
             <div><div class="t">${esc(d.title)} · ${d.choice === 'A' ? 'Invested' : 'Passed'}</div>
             <p>${esc(d.text)}</p>${d.bias ? `<span class="bias">${esc(d.bias)}</span>` : ''}</div></div>`).join('')}
       </div>`;
+    const badges = earnBadges(rounds);
     const lb = srv.leaderboard || [];
     main.innerHTML = `
       <div class="card hero pop">
@@ -566,11 +700,52 @@
         <div><div class="muted" style="font-weight:600;text-transform:uppercase;letter-spacing:.1em;font-size:12px">Your Bias Mirror</div>
           <h2 style="font-size:30px">${esc(srv.you.name)}: ${usd(total)}</h2>
           <div class="lost">${lost > 0 ? `Biased calls cost you <b style="color:var(--bad)">${usd(lost)}</b>${sunkLost ? (sunkLost >= lost ? ', all of it from paying into things that could not pay back' : `, ${usd(sunkLost)} of it from paying into things that could not pay back`) : ''}.` : (allPlayed ? 'A perfect manager. No money lost to bias.' : '')}
-          ${predMade ? ` Round 2 predictions: ${predRight}/${predMade} right.` : ''}</div></div>
+          ${predMade ? ` Round 2 predictions: ${predRight}/${predMade} right.` : ''}</div>
+          ${badges.length ? `<div class="badges">${badges.map((b) => `<span class="badge" title="${esc(b.why)}">${b.icon} ${esc(b.name)}</span>`).join('')}</div>` : ''}</div>
         <div class="muted" style="text-align:right;font-size:14px">Sunk money is gone.<br><b style="color:var(--brown)">Look forward.</b></div>
       </div>
       <div class="mirror">${rounds.map(col).join('')}</div>
+      ${x_rule()}
       ${lb.length > 1 ? `<div class="card lb pop"><h3 style="margin-bottom:10px">Final leaderboard</h3><ol>${lb.map((l, i) => `<li class="${l.name === srv.you.name ? 'me' : ''}"><span>${l.rank || i + 1}. ${esc(l.name)}</span><span>${usd(l.total)}</span></li>`).join('')}</ol></div>` : ''}`;
+  }
+
+  function x_rule() {
+    const id = ruleFor();
+    if (!id) return '';
+    const info = ruleInfo(id);
+    const r2 = LM.mirror(1, choicesFor(1));
+    const allOk = r2.length === 3 && r2.every((d) => d.ok);
+    const note = id === 'payback' ? (allOk ? 'You picked the forward-looking rule and stuck to it. That is exactly what an implementation intention does.' : 'Good rule. Did you stick to it on every offer?')
+      : id === 'finish' ? '“Finish what we started” is the sunk cost fallacy written as a rule.'
+      : id === 'frugal' ? 'Spending as little as possible protects you from bad deals, but it can also make you skip the good one.'
+      : 'No rule: every decision was made fresh, under time pressure.';
+    return `<div class="card rulerecap pop"><b>📌 Your Round 2 rule:</b> ${esc(info.label)}. <span class="muted">${esc(note)}</span></div>`;
+  }
+
+  function earnBadges(rounds) {
+    const out = [];
+    const rec = (r) => srv.you.rounds[r] || {};
+    const ch = (r) => choicesFor(r);
+    const real = (r, i) => !(rec(r).timedOut && rec(r).timedOut[i]) && !(rec(r).forced && rec(r).forced[i]);
+    if (ch(1)[0] === 'B' && ch(1)[1] === 'B' && real(1, 0) && real(1, 1)) out.push({ icon: '🧊', name: 'Cold Blooded', why: 'Scrapped every sunk-cost offer in Round 2' });
+    if (ch(0)[2] === 'A' && ch(1)[2] === 'A') out.push({ icon: '🎯', name: 'Bottleneck Hunter', why: 'Bought the upgrade that fixed the slowest machine in both rounds' });
+    const preds = predictionsFor(1); const s2 = LM.simulate(1, ch(1));
+    if (s2.steps.length === 3 && s2.steps.every((st) => preds[st.idx] && ((preds[st.idx] === 'yes') === st.ev.payable))) out.push({ icon: '🔮', name: 'Oracle', why: 'Every Round 2 prediction was right' });
+    const ms = [0, 1].flatMap((r) => (rec(r).ms || []).filter((m, i) => m > 0 && real(r, i)));
+    if (ms.length >= 4 && ms.reduce((a, b) => a + b, 0) / ms.length < 10000) out.push({ icon: '⚡', name: 'Quick Draw', why: 'Average decision under 10 seconds' });
+    const ratio = (x) => x.cash / x.best;
+    if (rounds[0].cash < rounds[0].best && ratio(rounds[1]) > ratio(rounds[0]) + 0.02) out.push({ icon: '📈', name: 'Comeback', why: 'Closer to the ghost manager in Round 2 than in Round 1' });
+    if (rounds.some((x) => ch(x.r).length === 3 && x.cash >= x.best)) out.push({ icon: '👻', name: 'Ghost Buster', why: 'Matched the ghost manager (perfect play) in a round' });
+    if (ruleFor() === 'payback' && rounds[1].cash >= rounds[1].best) out.push({ icon: '📌', name: 'Rule Keeper', why: 'Set a forward-looking rule and followed it perfectly' });
+    return out;
+  }
+  let badgesShown = false;
+  function showBadgeToasts() {
+    if (badgesShown || !srv || srv.phase !== 'final') return;
+    badgesShown = true;
+    const rounds = [0, 1].map((r) => ({ r, cash: LM.simulate(r, choicesFor(r)).cash, best: LM.bestChoices(r).cash }));
+    earnBadges(rounds).forEach((b, i) => setTimeout(() => { fx.sound('badge'); fx.toast(`Badge unlocked: ${b.name} ${b.icon}`, { tone: 'good' }); }, 700 + i * 900));
+    if (srv.rank === 1) setTimeout(() => fx.confetti({ count: 200 }), 300);
   }
 
   // ---------- boot ----------
