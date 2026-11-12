@@ -1,6 +1,6 @@
 // Caches the team game so "/?offline" still loads when the Wi-Fi is down.
-const CACHE = 'line-manager-v3';
-const FILES = ['/', '/style.css', '/engine.js', '/team.js'];
+const CACHE = 'line-manager-v4';
+const FILES = ['/', '/style.css', '/map.css', '/engine.js', '/map.js', '/team.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));

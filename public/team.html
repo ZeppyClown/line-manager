@@ -6,6 +6,7 @@
 <title>Line Manager</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/map.css">
 <style>
   .wrap { max-width: 1180px; margin: 0 auto; padding: 14px 28px 24px; }
   header.top { display: flex; align-items: center; gap: 18px; margin-bottom: 6px; }
@@ -128,50 +129,6 @@
   .runs li.on { background: var(--peach); }
   .runs li.todo { color: #b39a86; }
 
-  .mapwrap { position: relative; border-radius: 22px; overflow: hidden; min-height: 0;
-    background: radial-gradient(ellipse at 50% 40%, #3d2416 0%, #2a170d 70%, #21120a 100%);
-    box-shadow: inset 0 0 0 1px rgba(255,220,180,.06), var(--shadow); display: flex; align-items: center; }
-  .map { width: 100%; height: 100%; display: block; }
-  .map .bed { fill: none; stroke: #170b05; stroke-width: 22; stroke-linecap: round; opacity: .9; }
-  .map .tread { fill: none; stroke: #8a5a37; stroke-width: 14; stroke-linecap: round; stroke-dasharray: 3 9; animation: tread .6s linear infinite; }
-  @keyframes tread { to { stroke-dashoffset: -12; } }
-  .map .item rect { transform: scale(1.2); }
-  .map .item rect { fill: var(--orange-2); stroke: #7a3b1c; stroke-width: 1.5; }
-  .map .node { color: var(--brown); cursor: pointer; }
-  .map .node .disc { fill: #fdf6ec; stroke: #e9cfae; stroke-width: 4; filter: drop-shadow(0 6px 10px rgba(0,0,0,.45)); transition: transform .2s; }
-  .map .node:hover .disc { stroke: var(--orange-2); }
-  .map .supply .disc { fill: #e9d3b8; stroke: #c9a57f; }
-  .map .supply { color: #6b4026; }
-  .map .sell { cursor: default; }
-  .map .sell .disc { fill: var(--orange); stroke: #ffcf85; }
-  .map .dollar { font: 800 30px Poppins, sans-serif; fill: var(--brown); text-anchor: middle; }
-  .map .label { fill: rgba(253,246,236,.96); filter: drop-shadow(0 3px 6px rgba(0,0,0,.35)); }
-  .map text { font-family: Poppins, sans-serif; text-anchor: middle; fill: var(--brown); }
-  .map .nm { font-size: 14px; font-weight: 600; }
-  .map .rt { font-size: 15px; font-weight: 800; }
-  .map .rt.big { font-size: 20px; }
-  .map .ring { fill: none; stroke: var(--orange-2); stroke-width: 3; stroke-dasharray: 8 7; animation: spinring 6s linear infinite; }
-  @keyframes spinring { to { transform: rotate(360deg); } }
-  .map .halo { fill: rgba(232,80,50,.18); stroke: #e8503a; stroke-width: 3; animation: halo 1.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
-  @keyframes halo { 50% { opacity: .35; transform: scale(1.08); } }
-  .map .bn { fill: #e8503a; } .map .bnt { fill: #fff; font-size: 13px; font-weight: 800; letter-spacing: .08em; }
-  .map .save { fill: #2f8a4c; } .map .savet { fill: #fff; font-size: 13px; font-weight: 700; }
-  .map .util-bg { fill: none; stroke: rgba(255,255,255,.08); stroke-width: 5; }
-  .map .util { fill: none; stroke: #8fd19e; stroke-width: 5; stroke-linecap: round; }
-  .map .glow .util { stroke: #ff8a6b; }
-  .map .bumped .disc { animation: bumpdisc .9s ease; transform-box: fill-box; transform-origin: center; }
-  @keyframes bumpdisc { 40% { transform: scale(1.18); stroke: #8fd19e; } }
-  .map .pile rect { fill: #ffb547; stroke: #7a3b1c; stroke-width: 1.2; }
-  .map .pile .chip { fill: #e8503a; stroke: none; }
-  .map .pile text { fill: #fff; font-size: 13px; font-weight: 700; }
-  .maphud { position: absolute; left: 16px; top: 14px; display: flex; gap: 10px; }
-  .maphud div { background: rgba(253,246,236,.1); border: 1px solid rgba(253,246,236,.14); color: #fdf6ec; border-radius: 12px; padding: 6px 12px; backdrop-filter: blur(4px); }
-  .maphud small { display: block; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; opacity: .7; }
-  .maphud b { font-size: 18px; color: var(--orange-2); }
-  .inspector { position: absolute; width: 220px; background: #fffaf3; border-radius: 14px; padding: 12px 14px; box-shadow: 0 14px 30px rgba(0,0,0,.4); font-size: 13px; z-index: 5; animation: pop .2s ease both; }
-  .inspector b { font-size: 15px; } .inspector > span { display: block; color: var(--muted); margin: 2px 0 8px; }
-  .inspector .kv { display: flex; justify-content: space-between; padding: 3px 0; border-top: 1px dashed var(--line); }
-
   .right .panel { padding: 16px 18px; position: relative; overflow: hidden; }
   .right .offer h3 { font-size: 22px; margin: 2px 0 2px; }
   .right .offer .blurb { font-size: 13.5px; margin: 0 0 10px; color: var(--muted); }
@@ -262,6 +219,7 @@
   <main id="main"></main>
 </div>
 <script src="/engine.js"></script>
+<script src="/map.js"></script>
 <script src="/team.js"></script>
 </body>
 </html>
