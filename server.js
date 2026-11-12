@@ -59,6 +59,7 @@ function stats() {
       const gs = [groups.all, groups[t.condition]];
       for (const s of sim.steps) {
         if (r.forced && r.forced[s.idx]) { for (const g of gs) g.forced++; continue; }
+        if (r.timedOut && r.timedOut[s.idx]) { for (const g of gs) g.timedOut++; continue; } // a timeout defaults to 'skip', which is right on 2 of 3 offers, so it is not counted as a decision
         for (const g of gs) {
           if (s.ev.payable) { g.goodSeen++; if (s.invested) g.goodTaken++; }
           else { g.badSeen++; if (s.invested) g.badTaken++; }
@@ -74,7 +75,7 @@ function stats() {
     if (ri === 1) { const rules = {}; for (const t of game.teams) if (t.rule) rules[t.rule] = (rules[t.rule] || 0) + 1; out.rules = rules; }
   }
   return out;
-  function blank() { return { forced: 0, badSeen: 0, badTaken: 0, goodSeen: 0, goodTaken: 0, predSeen: 0, predRight: 0, done: 0, cashSum: 0 }; }
+  function blank() { return { forced: 0, timedOut: 0, badSeen: 0, badTaken: 0, goodSeen: 0, goodTaken: 0, predSeen: 0, predRight: 0, done: 0, cashSum: 0 }; }
 }
 
 function publicState() {

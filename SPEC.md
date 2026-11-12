@@ -38,7 +38,7 @@ Base rates: Mixer 10, Press 10, Freezer 7, Packer 12 → 7/hr = $84/hr.
 |---|---|---|---|---|---|---|---|---|
 | 1 | 0 (24h) | Mixer 1 energy retrofit — finish it | $500 already spent | $360 | saves $12/hr running cost | +$12/hr | 30h | Unpayable → B |
 | 2 | 8 (16h) | Press 2 turbo kit | $350 already spent | $180 | Press +4/hr | $0 (Freezer is bottleneck) | never | Unpayable → B |
-| 3 | 16 (8h) | Freezer 3 fast-chill | none | $96 | Freezer +2/hr | +$24/hr | 4h | Good → A |
+| 3 | 16 (8h) | Finish the Freezer 3 fast-chill install | $400 already spent | $96 | Freezer +2/hr | +$24/hr | 4h | Good → A (sunk spend, but still pays back) |
 
 Optimal R2 = 500 + 2016 + 192 − 96 = **$2,612**. Buy-everything = 500 + 2016 + 288 + 192 − 636 = **$2,360**.
 
