@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: line-manager
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci
+    startCommand: node server.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: HOST_KEY
+        sync: false   # Render asks for it when you create the service; this is the host dashboard password
+      - key: NODE_VERSION
+        value: "22"

@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Line Manager · Host</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/style.css">
+<style>
+  body { font-size: 18px; }
+  .wrap { max-width: 1500px; margin: 0 auto; padding: 26px 40px 110px; }
+  header.top { display: flex; align-items: center; gap: 16px; margin-bottom: 22px; }
+  header.top .brand { font-size: 28px; }
+  header.top .spacer { flex: 1; }
+  .phase-name { font-weight: 600; color: var(--brown-3); }
+
+  .lobby { display: grid; grid-template-columns: 460px 1fr; gap: 36px; align-items: start; }
+  .joinbox { padding: 30px; text-align: center; }
+  .joinbox .url { font-size: 30px; font-weight: 800; word-break: break-all; margin: 6px 0 16px; }
+  .joinbox img { width: 300px; height: 300px; }
+  .lobby h1 { font-size: 76px; margin-bottom: 6px; }
+  .lobby .tagline { font-size: 24px; color: var(--brown-2); margin: 0 0 26px; }
+  .teams { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+  .chip { padding: 16px 18px; display: flex; align-items: center; gap: 12px; position: relative; }
+  .chip .num { width: 38px; height: 38px; border-radius: 50%; background: var(--brown); color: #fff; display: grid; place-items: center; font-weight: 800; }
+  .chip .nm { font-weight: 700; font-size: 20px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip .x { position: absolute; top: 4px; right: 8px; background: none; padding: 2px 6px; font-size: 16px; color: var(--muted); }
+  .chip .pill { cursor: pointer; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--good); flex: 0 0 auto; }
+  .dot.off { background: #d6c3b0; }
+  .empty { color: var(--muted); font-size: 20px; padding: 26px; border: 2px dashed var(--line); border-radius: var(--radius); text-align: center; }
+
+  .live { display: grid; grid-template-columns: 1.25fr 1fr; gap: 28px; align-items: start; }
+  table { width: 100%; border-collapse: collapse; }
+  .board { padding: 10px 22px 16px; }
+  .board td, .board th { padding: 12px 8px; text-align: left; border-bottom: 1px solid var(--line); }
+  .board th { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+  .board tr:last-child td { border-bottom: 0; }
+  .board .cash { text-align: right; font-weight: 800; font-size: 22px; font-variant-numeric: tabular-nums; }
+  .pips { display: flex; gap: 6px; }
+  .pip { width: 22px; height: 22px; border-radius: 6px; background: #efe3d4; }
+  .pip.bad { background: var(--bad); }
+  .pip.good { background: var(--good); }
+  .pip.skip { background: #bda48e; }
+  .pip.skipgood { background: repeating-linear-gradient(45deg, #bda48e 0 4px, #e9c8b7 4px 8px); }
+
+  .chart { padding: 24px 26px; }
+  .chart h3 { font-size: 22px; margin-bottom: 4px; }
+  .chart .sub { color: var(--muted); font-size: 15px; margin-bottom: 18px; }
+  .bars { display: flex; gap: 34px; align-items: flex-end; height: 300px; padding: 0 10px; border-bottom: 2px solid var(--line); }
+  .bar { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; }
+  .bar .val { font-size: 34px; font-weight: 800; margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+  .bar .col { width: 100%; max-width: 170px; border-radius: 14px 14px 4px 4px; transition: height .6s cubic-bezier(.2,.8,.2,1); min-height: 4px; }
+  .barlabels { display: flex; gap: 34px; padding: 10px 10px 0; }
+  .barlabels div { flex: 1; text-align: center; font-weight: 700; font-size: 18px; }
+  .barlabels small { display: block; font-weight: 500; color: var(--muted); font-size: 14px; }
+
+  .reveal h1 { font-size: 54px; margin-bottom: 6px; }
+  .reveal .lead { font-size: 22px; color: var(--brown-2); margin: 0 0 24px; }
+  .reveal-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 26px; }
+  .verdict { margin-top: 24px; padding: 20px 26px; font-size: 22px; font-weight: 600; display: flex; gap: 16px; align-items: center; }
+  .verdict .big { font-size: 40px; }
+
+  .podium { display: flex; justify-content: center; align-items: flex-end; gap: 22px; margin: 30px 0 10px; }
+  .pod { width: 260px; text-align: center; }
+  .pod .block { border-radius: 18px 18px 6px 6px; display: grid; place-items: center; color: #fff; font-size: 54px; font-weight: 800; }
+  .pod .nm { font-size: 24px; font-weight: 800; margin-bottom: 4px; }
+  .pod .cash { font-size: 20px; color: var(--brown-2); margin-bottom: 10px; font-weight: 600; }
+  .rest { max-width: 720px; margin: 22px auto 0; padding: 14px 24px; }
+  .rest li { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 20px; }
+  .rest ol { list-style: none; margin: 0; padding: 0; }
+
+  .controls { position: fixed; left: 0; right: 0; bottom: 0; padding: 14px 40px; background: rgba(253,246,236,.92); backdrop-filter: blur(8px); border-top: 1px solid var(--line); display: flex; gap: 12px; align-items: center; }
+  .controls .spacer { flex: 1; }
+  .controls button { font-size: 16px; padding: 12px 18px; }
+  .steps { display: flex; gap: 6px; }
+  .steps span { font-size: 13px; padding: 4px 10px; border-radius: 999px; background: #efe3d4; color: var(--muted); font-weight: 600; }
+  .steps span.on { background: var(--brown); color: #fff; }
+  .keybox { max-width: 420px; margin: 18vh auto; padding: 32px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">Line Manager</div>
+    <span class="phase-name" id="phaseName"></span>
+    <div class="spacer"></div>
+    <span id="conn" class="conn"></span>
+  </header>
+  <main id="main"></main>
+</div>
+<div class="controls hidden" id="controls"></div>
+<script src="/engine.js"></script>
+<script src="/host.js"></script>
+</body>
+</html>

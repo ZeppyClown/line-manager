@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Line Manager</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/style.css">
+<style>
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 14px 28px 24px; }
+  header.top { display: flex; align-items: center; gap: 18px; margin-bottom: 6px; }
+  header.top .brand { font-size: 22px; }
+  header.top .spacer { flex: 1; }
+  .stat { text-align: right; }
+  .stat .label { font-size: 12px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: .08em; }
+  .stat .value { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .clock { min-width: 210px; }
+  .clockbar { height: 8px; background: #ecdcc8; border-radius: 99px; overflow: hidden; margin-top: 6px; }
+  .clockbar > div { height: 100%; background: var(--brown); border-radius: 99px; transition: width .3s linear; }
+
+  /* centered screens */
+  .center { min-height: 80vh; display: grid; place-items: center; text-align: center; }
+  .center .card { padding: 40px 48px; max-width: 560px; width: 100%; }
+  .center h1 { font-size: 54px; margin-bottom: 8px; }
+  .center p { font-size: 18px; }
+  .join-row { display: flex; gap: 12px; margin-top: 24px; }
+  .err { color: var(--bad); font-weight: 600; min-height: 24px; margin-top: 10px; }
+
+  /* decision */
+  .round-title { display: flex; align-items: baseline; gap: 12px; margin: 8px 0 12px; }
+  .round-title h2 { font-size: 24px; }
+  .decision { display: grid; grid-template-columns: 1.35fr 1fr; gap: 22px; align-items: start; }
+  .offer { padding: 18px 22px; position: relative; overflow: hidden; }
+  .timer { position: absolute; left: 0; top: 0; height: 6px; background: var(--orange); transition: width .25s linear; }
+  .timer.low { background: var(--bad); }
+  .offer .kicker { font-size: 13px; font-weight: 600; color: var(--brown-3); text-transform: uppercase; letter-spacing: .1em; }
+  .offer h3 { font-size: 25px; margin: 4px 0 4px; }
+  .offer .blurb { color: var(--muted); margin: 0 0 10px; }
+  .rows { display: grid; gap: 6px; }
+  .row { display: flex; justify-content: space-between; align-items: center; padding: 8px 14px; border-radius: 12px; background: #faf3ea; font-size: 16px; }
+  .row b { font-size: 19px; }
+  .row.sunk { background: #f3ece4; color: #6b5040; }
+  .tag { margin-top: 10px; display: flex; align-items: center; gap: 14px; padding: 10px 16px; border-radius: 14px; font-weight: 600; font-size: 18px; border: 2px dashed; }
+  .tag.ok { background: var(--good-bg); color: var(--good); border-color: var(--good); }
+  .tag.no { background: var(--bad-bg); color: var(--bad); border-color: var(--bad); }
+  .tag .ico { font-size: 26px; line-height: 1; }
+  .tag .sub { font-size: 13px; font-weight: 500; opacity: .85; }
+  .tagbar { position: relative; height: 12px; background: rgba(255,255,255,.7); border-radius: 99px; margin-top: 8px; overflow: visible; }
+  .tagbar .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; }
+  .tagbar .mark { position: absolute; top: -5px; bottom: -5px; width: 3px; background: currentColor; border-radius: 2px; }
+  .panel { padding: 22px 22px 24px; }
+  .panel h4 { margin: 0 0 4px; font-size: 20px; }
+  .panel p { margin: 0 0 16px; color: var(--muted); }
+  .choices { display: grid; gap: 12px; }
+  .choices button { width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; font-size: 18px; }
+  .choices button small { font-weight: 500; opacity: .75; font-size: 13px; }
+  .predict-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .predict-row button { font-size: 20px; padding: 18px; }
+  .newmgr { margin-top: 10px; padding: 10px 14px; font-size: 15px; border-radius: 14px; background: #fff6e6; border: 2px solid #f6d9a8; display: flex; gap: 12px; }
+  .newmgr .face { font-size: 30px; line-height: 1; }
+  .newmgr b { display: block; margin-bottom: 2px; }
+  .guess { font-size: 14px; font-weight: 600; margin-bottom: 12px; padding: 8px 12px; border-radius: 10px; }
+  .guess.right { background: var(--good-bg); color: var(--good); }
+  .guess.wrong { background: var(--bad-bg); color: var(--bad); }
+
+  .simbanner { margin-top: 16px; padding: 22px 26px; display: flex; align-items: center; gap: 22px; }
+  .simbanner .big { font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .simbanner .earned { color: var(--good); font-weight: 700; font-size: 22px; font-variant-numeric: tabular-nums; }
+  .spinner { width: 34px; height: 34px; border-radius: 50%; border: 4px solid var(--peach); border-top-color: var(--orange); animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* mirror */
+  .mirror { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 18px; }
+  .mirror .card { padding: 22px; }
+  .mirror h3 { font-size: 20px; margin-bottom: 12px; display: flex; justify-content: space-between; }
+  .mi { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+  .mi:first-of-type { border-top: 0; }
+  .mi .mark { flex: 0 0 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; color: #fff; }
+  .mi .mark.ok { background: var(--good); }
+  .mi .mark.no { background: var(--bad); }
+  .mi .t { font-weight: 600; }
+  .mi .bias { display: inline-block; margin-top: 4px; font-size: 12px; font-weight: 700; color: var(--bad); background: var(--bad-bg); padding: 2px 8px; border-radius: 6px; }
+  .mi p { margin: 2px 0 0; font-size: 14px; color: #5e4434; }
+  .hero { display: grid; grid-template-columns: auto 1fr auto; gap: 28px; align-items: center; padding: 26px 30px; }
+  .hero .rank { font-size: 64px; font-weight: 800; color: var(--orange); line-height: 1; }
+  .hero .lost { font-size: 15px; }
+  .lb { margin-top: 22px; padding: 18px 22px; }
+  .lb ol { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px 26px; }
+  .lb li { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed var(--line); }
+  .lb li.me { font-weight: 800; color: var(--brown-2); }
+
+  @media (max-width: 860px) { .decision, .mirror { grid-template-columns: 1fr; } .line { grid-template-columns: repeat(2, 1fr); } .output { grid-column: 1 / -1; } .machine::after { display: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">Line Manager</div>
+    <span id="teamPill" class="pill hidden"></span>
+    <span id="conn" class="conn hidden" title="Connection"></span>
+    <div class="spacer"></div>
+    <div id="clockStat" class="stat clock hidden"><div class="label" id="clockLabel">Hour 0 of 24</div><div class="clockbar"><div id="clockFill" style="width:0%"></div></div></div>
+    <div id="cashStat" class="stat hidden"><div class="label">Cash</div><div class="value" id="cash">$500</div></div>
+  </header>
+  <main id="main"></main>
+</div>
+<script src="/engine.js"></script>
+<script src="/team.js"></script>
+</body>
+</html>
