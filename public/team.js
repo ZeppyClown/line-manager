@@ -38,7 +38,8 @@
     coin: (x, y, t) => { try { window.FX && FX.coinPop && FX.coinPop(x, y, t); } catch (_) {} },
     toast: (t, o) => { try { window.FX && FX.toast && FX.toast(t, o); } catch (_) {} },
     pulse: (el) => { try { window.FX && FX.pulse && el && FX.pulse(el); } catch (_) {} },
-    countdown: () => { try { if (window.FX && FX.countdown) return FX.countdown(['3', '2', '1', 'Go!']); } catch (_) {} return Promise.resolve(); },
+    // Never let a stuck countdown block the round: give up after 5 s.
+    countdown: () => { let p = Promise.resolve(); try { if (window.FX && FX.countdown) p = Promise.resolve(FX.countdown(['3', '2', '1', 'Go!'])).catch(() => {}); } catch (_) {} return Promise.race([p, new Promise((r) => setTimeout(r, 5000))]); },
   };
   const seen = (k) => { try { return sessionStorage.getItem('lm-seen-' + k) === '1'; } catch (_) { return false; } };
   const markSeen = (k) => { try { sessionStorage.setItem('lm-seen-' + k, '1'); } catch (_) {} };
@@ -296,7 +297,11 @@
     setHeader();
     main.innerHTML = `<div class="center"><div class="card pop"><div class="pill" style="margin-bottom:10px">${ROUNDS[r].title}</div><h1 class="brand" style="font-size:40px">Get ready…</h1></div></div>`;
     const id = srv.you.id;
-    fx.countdown().then(() => { markSeen(`count-${id}-${r}`); fx.sound('roundStart'); screenKey = ''; render(); });
+    fx.countdown().then(() => {
+      markSeen(`count-${id}-${r}`);
+      if (screenKey !== `count-${r}`) return;   // phase moved on meanwhile
+      fx.sound('roundStart'); screenKey = ''; render();
+    });
   }
 
   function renderRule() {
