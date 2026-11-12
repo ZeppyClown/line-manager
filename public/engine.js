@@ -11,11 +11,18 @@
       title: 'Round 1 · Plant A',
       price: 10,
       machines: [
-        { id: 'cutter', name: 'Cutter', rate: 9 },
-        { id: 'welder', name: 'Welder', rate: 6 },
-        { id: 'painter', name: 'Painter', rate: 9 },
-        { id: 'boxer', name: 'Boxer', rate: 12 },
+        { id: 'cutter', name: 'Cutter', rate: 9, icon: 'saw', x: 300, y: 120, role: 'Cuts sheet metal into panels' },
+        { id: 'welder', name: 'Welder', rate: 6, icon: 'flame', x: 300, y: 470, role: 'Welds steel rods into frames' },
+        { id: 'painter', name: 'Painter', rate: 9, icon: 'drop', x: 560, y: 295, role: 'Joins 1 panel + 1 frame, then paints it' },
+        { id: 'boxer', name: 'Boxer', rate: 12, icon: 'box', x: 745, y: 295, role: 'Boxes finished units for sale' },
       ],
+      product: 'cabinet',
+      supplies: [
+        { id: 'sheet', name: 'Sheet metal', rate: 14, x: 85, y: 120, to: 'cutter' },
+        { id: 'rods', name: 'Steel rods', rate: 14, x: 85, y: 470, to: 'welder' },
+      ],
+      links: [['cutter', 'painter'], ['welder', 'painter'], ['painter', 'boxer']],
+      sell: { x: 870, y: 295 },
       offers: [
         {
           title: 'Finish the Welder retrofit',
@@ -42,11 +49,18 @@
       title: 'Round 2 · Plant B',
       price: 12,
       machines: [
-        { id: 'mixer', name: 'Mixer 1', rate: 10 },
-        { id: 'press', name: 'Press 2', rate: 10 },
-        { id: 'freezer', name: 'Freezer 3', rate: 7 },
-        { id: 'packer', name: 'Packer 4', rate: 12 },
+        { id: 'mixer', name: 'Mixer 1', rate: 10, icon: 'whisk', x: 300, y: 120, role: 'Mixes flour into dough' },
+        { id: 'press', name: 'Press 2', rate: 10, icon: 'press', x: 300, y: 470, role: 'Presses fruit into filling' },
+        { id: 'freezer', name: 'Freezer 3', rate: 7, icon: 'snow', x: 560, y: 295, role: 'Joins 1 dough + 1 filling, then freezes the tart' },
+        { id: 'packer', name: 'Packer 4', rate: 12, icon: 'box', x: 745, y: 295, role: 'Packs frozen tarts for sale' },
       ],
+      product: 'tart',
+      supplies: [
+        { id: 'flour', name: 'Flour', rate: 14, x: 85, y: 120, to: 'mixer' },
+        { id: 'fruit', name: 'Fruit', rate: 14, x: 85, y: 470, to: 'press' },
+      ],
+      links: [['mixer', 'freezer'], ['press', 'freezer'], ['freezer', 'packer']],
+      sell: { x: 870, y: 295 },
       offers: [
         {
           title: 'Finish the Mixer 1 energy retrofit',
@@ -79,6 +93,23 @@
   function hourly(round, st) {
     const units = Math.min(...Object.values(st.rates));
     return units * round.price + st.saving;
+  }
+
+  // Visual flow model: each machine makes min(own rate, what its inputs deliver); an assembler needs one
+  // item from every input. Anything a machine makes beyond what the next one uses piles up on the belt.
+  function flows(round, st) {
+    const prod = {};
+    const inputs = {};
+    for (const [a, b] of round.links) (inputs[b] = inputs[b] || []).push(a);
+    for (const sp of round.supplies) { prod[sp.id] = sp.rate; (inputs[sp.to] = inputs[sp.to] || []).push(sp.id); }
+    const order = round.machines.map(m => m.id);
+    for (const id of order) prod[id] = Math.min(st.rates[id], ...(inputs[id] || []).map(i => prod[i]));
+    const last = order[order.length - 1];
+    const edges = [];
+    for (const sp of round.supplies) edges.push({ from: sp.id, to: sp.to, flow: prod[sp.to], made: sp.rate, supply: true });
+    for (const [a, b] of round.links) edges.push({ from: a, to: b, flow: prod[b], made: prod[a], pile: Math.max(0, prod[a] - prod[b]) });
+    edges.push({ from: last, to: 'sell', flow: prod[last], made: prod[last], pile: 0 });
+    return { prod, edges, units: prod[last] };
   }
 
   function bottleneckIds(round, st) {
@@ -162,7 +193,7 @@
   function fmtH(h) { return Number.isInteger(h) ? `${h}h` : `${h.toFixed(1)}h`; }
   function money(n) { return (n < 0 ? '−$' : '+$') + Math.abs(Math.round(n)).toLocaleString('en-US'); }
 
-  const api = { SHIFT_HOURS, CHECKPOINTS, START_CASH, DECISION_SECONDS, ROUNDS, initialState, hourly, bottleneckIds, applyEffect, evaluateOffer, simulate, bestChoices, mirror, fmtH, money };
+  const api = { SHIFT_HOURS, CHECKPOINTS, START_CASH, DECISION_SECONDS, ROUNDS, initialState, hourly, flows, bottleneckIds, applyEffect, evaluateOffer, simulate, bestChoices, mirror, fmtH, money };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.LM = api;
 })(typeof window !== 'undefined' ? window : globalThis);

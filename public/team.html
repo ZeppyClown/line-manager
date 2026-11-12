@@ -89,6 +89,113 @@
   .lb li { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed var(--line); }
   .lb li.me { font-weight: 800; color: var(--brown-2); }
 
+
+  /* ================= factory game layout ================= */
+  body.playing .wrap { max-width: none; padding: 10px 16px 12px; }
+  body.playing header.top { margin-bottom: 8px; }
+  .game { display: grid; grid-template-columns: 236px minmax(0, 1fr) 330px; gap: 14px; height: calc(100vh - 62px); min-height: 560px; }
+  .side > * { flex-shrink: 0; }
+  .side { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; scrollbar-width: none; }
+  .side .panel { background: #fff; border-radius: 16px; box-shadow: var(--shadow); padding: 14px 16px; }
+  .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--brown-3); margin-bottom: 4px; }
+  .goal p { margin: 0; font-size: 14px; line-height: 1.45; font-weight: 500; }
+  .clockrow { font-weight: 700; font-size: 15px; }
+  .clockbar { height: 7px; background: #efe1cf; border-radius: 99px; overflow: hidden; margin: 6px 0 10px; }
+  .clockbar > div { height: 100%; background: var(--brown); border-radius: 99px; }
+  .cashrow { display: flex; justify-content: space-between; align-items: baseline; }
+  .cashrow small { color: var(--muted); font-weight: 600; }
+  .cashrow b { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .spark { width: 100%; height: 64px; margin-top: 6px; overflow: visible; }
+  .spark polyline { fill: none; stroke: var(--orange); stroke-width: 2.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+  .spark .tick { stroke: #efe1cf; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+  .replay { margin-top: 10px; }
+  .replay input[type=range] { width: 100%; accent-color: var(--brown); }
+  .rbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+  button.sm { padding: 8px 10px; font-size: 13px; border-radius: 10px; }
+  .log ol, .runs ul { list-style: none; margin: 0; padding: 0; }
+  .log li { display: flex; gap: 10px; padding: 7px 0; border-top: 1px solid #f3e7d8; font-size: 13px; color: #b39a86; }
+  .log li:first-child { border-top: 0; }
+  .log li.did, .log li.cur { color: var(--brown); }
+  .log li.cur .t { font-weight: 700; }
+  .log .h { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 40px; }
+  .log .t small { display: block; color: var(--muted); font-weight: 500; }
+  .log li.cur .t small { color: var(--orange); font-weight: 700; }
+  .runs li { display: flex; justify-content: space-between; padding: 6px 10px; border-radius: 10px; font-size: 13px; font-weight: 600; }
+  .runs li.on { background: var(--peach); }
+  .runs li.todo { color: #b39a86; }
+
+  .mapwrap { position: relative; border-radius: 22px; overflow: hidden; min-height: 0;
+    background: radial-gradient(ellipse at 50% 40%, #3d2416 0%, #2a170d 70%, #21120a 100%);
+    box-shadow: inset 0 0 0 1px rgba(255,220,180,.06), var(--shadow); display: flex; align-items: center; }
+  .map { width: 100%; height: 100%; display: block; }
+  .map .bed { fill: none; stroke: #170b05; stroke-width: 22; stroke-linecap: round; opacity: .9; }
+  .map .tread { fill: none; stroke: #8a5a37; stroke-width: 14; stroke-linecap: round; stroke-dasharray: 3 9; animation: tread .6s linear infinite; }
+  @keyframes tread { to { stroke-dashoffset: -12; } }
+  .map .item rect { transform: scale(1.2); }
+  .map .item rect { fill: var(--orange-2); stroke: #7a3b1c; stroke-width: 1.5; }
+  .map .node { color: var(--brown); cursor: pointer; }
+  .map .node .disc { fill: #fdf6ec; stroke: #e9cfae; stroke-width: 4; filter: drop-shadow(0 6px 10px rgba(0,0,0,.45)); transition: transform .2s; }
+  .map .node:hover .disc { stroke: var(--orange-2); }
+  .map .supply .disc { fill: #e9d3b8; stroke: #c9a57f; }
+  .map .supply { color: #6b4026; }
+  .map .sell { cursor: default; }
+  .map .sell .disc { fill: var(--orange); stroke: #ffcf85; }
+  .map .dollar { font: 800 30px Poppins, sans-serif; fill: var(--brown); text-anchor: middle; }
+  .map .label { fill: rgba(253,246,236,.96); filter: drop-shadow(0 3px 6px rgba(0,0,0,.35)); }
+  .map text { font-family: Poppins, sans-serif; text-anchor: middle; fill: var(--brown); }
+  .map .nm { font-size: 14px; font-weight: 600; }
+  .map .rt { font-size: 15px; font-weight: 800; }
+  .map .rt.big { font-size: 20px; }
+  .map .ring { fill: none; stroke: var(--orange-2); stroke-width: 3; stroke-dasharray: 8 7; animation: spinring 6s linear infinite; }
+  @keyframes spinring { to { transform: rotate(360deg); } }
+  .map .halo { fill: rgba(232,80,50,.18); stroke: #e8503a; stroke-width: 3; animation: halo 1.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  @keyframes halo { 50% { opacity: .35; transform: scale(1.08); } }
+  .map .bn { fill: #e8503a; } .map .bnt { fill: #fff; font-size: 13px; font-weight: 800; letter-spacing: .08em; }
+  .map .save { fill: #2f8a4c; } .map .savet { fill: #fff; font-size: 13px; font-weight: 700; }
+  .map .util-bg { fill: none; stroke: rgba(255,255,255,.08); stroke-width: 5; }
+  .map .util { fill: none; stroke: #8fd19e; stroke-width: 5; stroke-linecap: round; }
+  .map .glow .util { stroke: #ff8a6b; }
+  .map .bumped .disc { animation: bumpdisc .9s ease; transform-box: fill-box; transform-origin: center; }
+  @keyframes bumpdisc { 40% { transform: scale(1.18); stroke: #8fd19e; } }
+  .map .pile rect { fill: #ffb547; stroke: #7a3b1c; stroke-width: 1.2; }
+  .map .pile .chip { fill: #e8503a; stroke: none; }
+  .map .pile text { fill: #fff; font-size: 13px; font-weight: 700; }
+  .maphud { position: absolute; left: 16px; top: 14px; display: flex; gap: 10px; }
+  .maphud div { background: rgba(253,246,236,.1); border: 1px solid rgba(253,246,236,.14); color: #fdf6ec; border-radius: 12px; padding: 6px 12px; backdrop-filter: blur(4px); }
+  .maphud small { display: block; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; opacity: .7; }
+  .maphud b { font-size: 18px; color: var(--orange-2); }
+  .inspector { position: absolute; width: 220px; background: #fffaf3; border-radius: 14px; padding: 12px 14px; box-shadow: 0 14px 30px rgba(0,0,0,.4); font-size: 13px; z-index: 5; animation: pop .2s ease both; }
+  .inspector b { font-size: 15px; } .inspector > span { display: block; color: var(--muted); margin: 2px 0 8px; }
+  .inspector .kv { display: flex; justify-content: space-between; padding: 3px 0; border-top: 1px dashed var(--line); }
+
+  .right .panel { padding: 16px 18px; position: relative; overflow: hidden; }
+  .right .offer h3 { font-size: 22px; margin: 2px 0 2px; }
+  .right .offer .blurb { font-size: 13.5px; margin: 0 0 10px; color: var(--muted); }
+  .right .rows { gap: 5px; }
+  .right .row { font-size: 14px; padding: 7px 12px; }
+  .right .row b { font-size: 15px; text-align: right; }
+  .right .tag { font-size: 15px; padding: 9px 12px; gap: 10px; margin-top: 8px; }
+  .right .tag .ico { font-size: 22px; }
+  .right .tag .sub { font-size: 11.5px; }
+  .right .newmgr { font-size: 13px; margin-top: 8px; padding: 9px 12px; }
+  .right .newmgr .face { font-size: 24px; }
+  .right .actions h4 { margin: 0 0 4px; font-size: 18px; }
+  .right .actions p { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
+  .right .actions .fine { margin: 10px 0 0; font-size: 12px; text-align: center; }
+  .right .choices { gap: 10px; }
+  .right .choices button { padding: 14px 16px; font-size: 16px; }
+  .right .guess { font-size: 13px; }
+  .right .kicker { font-size: 11.5px; font-weight: 600; color: var(--brown-3); text-transform: uppercase; letter-spacing: .1em; }
+  .right .timer { height: 5px; }
+  .running .simclock { font-size: 52px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; margin-top: 4px; }
+  .running .earnbox { background: var(--good-bg); border-radius: 12px; padding: 10px 14px; margin: 10px 0; display: flex; justify-content: space-between; align-items: baseline; }
+  .running .earnbox b { color: var(--good); font-size: 24px; font-variant-numeric: tabular-nums; }
+  .running .what { font-size: 14px; margin: 0; }
+  .done .final { font-size: 46px; font-weight: 800; line-height: 1.1; margin: 4px 0; }
+  .done p { font-size: 14px; }
+  @media (max-width: 1100px) { .game { grid-template-columns: 200px minmax(0,1fr) 300px; } }
+  @media (max-height: 700px) { .side .goal { display: none; } }
+
   @media (max-width: 860px) { .decision, .mirror { grid-template-columns: 1fr; } .line { grid-template-columns: repeat(2, 1fr); } .output { grid-column: 1 / -1; } .machine::after { display: none; } }
 </style>
 </head>
@@ -99,8 +206,6 @@
     <span id="teamPill" class="pill hidden"></span>
     <span id="conn" class="conn hidden" title="Connection"></span>
     <div class="spacer"></div>
-    <div id="clockStat" class="stat clock hidden"><div class="label" id="clockLabel">Hour 0 of 24</div><div class="clockbar"><div id="clockFill" style="width:0%"></div></div></div>
-    <div id="cashStat" class="stat hidden"><div class="label">Cash</div><div class="value" id="cash">$500</div></div>
   </header>
   <main id="main"></main>
 </div>

@@ -137,17 +137,10 @@
   function showTag(r) { return r === 1 || (srv && srv.you.condition === 'tag'); }
 
   // ---------- header ----------
-  function setHeader({ hour = null, cash = null } = {}) {
+  function setHeader() {
     const you = srv && srv.you;
     const pill = $('#teamPill');
     if (you) { pill.textContent = `Team ${you.num} · ${you.name}`; pill.classList.remove('hidden'); } else pill.classList.add('hidden');
-    $('#clockStat').classList.toggle('hidden', hour == null);
-    $('#cashStat').classList.toggle('hidden', cash == null);
-    if (hour != null) {
-      $('#clockLabel').textContent = `Hour ${Math.floor(hour)} of ${SHIFT_HOURS}`;
-      $('#clockFill').style.width = (hour / SHIFT_HOURS * 100) + '%';
-    }
-    if (cash != null) $('#cash').textContent = usd(cash);
     updateConn();
   }
 
@@ -169,6 +162,7 @@
       }
     } else if (srv.phase === 'final') { key = 'final-' + JSON.stringify([choicesFor(0), choicesFor(1), srv.rank, srv.leaderboard]); fn = renderFinal; }
     else { key = 'reveal-' + srv.phase + '-' + choicesFor(0).join('') + choicesFor(1).join(''); fn = renderReveal; }
+    document.body.classList.toggle('playing', /^(dec|sim|done)-/.test(key));
     if (key !== screenKey || force) { screenKey = key; fn(); }
     else if (key === 'lobby') fn();
   }
@@ -211,27 +205,188 @@
       </div></div>`;
   }
 
-  const GEAR = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>';
+  // ================= factory map UI =================
+  const ICONS = {
+    saw: '<circle cx="12" cy="12" r="7"/><path d="M12 2.5l1.6 3M21.5 12l-3 1.6M12 21.5l-1.6-3M2.5 12l3-1.6M18.7 5.3l-2.4 2.4M18.7 18.7l-2.4-2.4M5.3 18.7l2.4-2.4M5.3 5.3l2.4 2.4"/><circle cx="12" cy="12" r="2"/>',
+    flame: '<path d="M12 21c-3.9 0-6.5-2.6-6.5-6.2 0-3.4 2.6-5.3 3.6-8.3.9 1.6 1.5 2.6 2.6 3.2C12 7 13 4.6 15.5 3c-.4 3 3 5.6 3 10.8 0 4.4-2.8 7.2-6.5 7.2z"/><path d="M12 21c-1.7 0-3-1.2-3-3 0-2 1.7-3 2.3-4.8C12.6 15 15 15.6 15 18c0 1.8-1.3 3-3 3z"/>',
+    drop: '<path d="M12 3c3.5 4.6 6 7.8 6 11a6 6 0 0 1-12 0c0-3.2 2.5-6.4 6-11z"/><path d="M9.2 14.5a2.9 2.9 0 0 0 2.8 2.8"/>',
+    box: '<path d="M3.5 7.5L12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5L12 12l8.5-4.5M12 12v9"/>',
+    whisk: '<path d="M4 12h16a8 8 0 0 1-16 0z"/><path d="M15 4l-3.5 7.5M18 6l-5 5.5"/>',
+    press: '<path d="M4 4h16M4 20h16M7 4v4h10V4M7 20v-4h10v4"/><path d="M12 9.5v5M10 12.5l2 2 2-2"/>',
+    snow: '<path d="M12 2.5v19M3.8 7.2l16.4 9.6M3.8 16.8l16.4-9.6"/><path d="M9.5 3.8L12 6l2.5-2.2M9.5 20.2L12 18l2.5 2.2"/>',
+    crate: '<rect x="3.5" y="5" width="17" height="14" rx="1.5"/><path d="M3.5 9.5h17M3.5 14.5h17M9 5v14M15 5v14"/>',
+  };
+  const icon = (k, size = 34) => `<g transform="translate(${-size / 2},${-size / 2}) scale(${size / 24})" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</g>`;
 
-  function lineHTML(r, st, { target = null, bumped = null, run = false } = {}) {
+  function belt(x1, y1, x2, y2) {
+    const mx = (x1 + x2) / 2;
+    return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+  }
+
+  // Map of the factory as SVG. opts: target (machine id of the current offer), bumped, saving
+  function mapSVG(r, st, opts = {}) {
     const round = ROUNDS[r];
-    const glow = r === 1 ? LM.bottleneckIds(round, st) : [];
-    const units = Math.min(...Object.values(st.rates));
-    const machines = round.machines.map((m) => `
-      <div class="machine ${glow.includes(m.id) ? 'glow' : ''} ${target === m.id ? 'target' : ''} ${bumped === m.id ? 'bumped' : ''}">
-        ${glow.includes(m.id) ? '<span class="bn-label">BOTTLENECK</span>' : ''}
-        ${GEAR}
-        <div class="name">${esc(m.name)}</div>
-        <div class="rate">${st.rates[m.id]} <small>/hr</small></div>
-      </div>`).join('');
-    const boxes = run ? Array.from({ length: 6 }, (_, i) => `<span class="box" style="animation-delay:${(-i * 0.37).toFixed(2)}s"></span>`).join('') : '';
-    return `<div class="line">${machines}
-      <div class="output"><small>Line makes</small><div class="big">${units}/hr</div><small>× ${usd(round.price)}${st.saving ? ` + ${usd(st.saving)} saved` : ''} = <b>${usd(LM.hourly(round, st))}/hr</b></small></div>
-      <div class="conveyor ${run ? 'run' : ''}">${boxes}</div></div>`;
+    const fl = LM.flows(round, st);
+    const nudges = r === 1;                   // bottleneck glow + pile-ups are Round 2 nudges
+    const glow = nudges ? LM.bottleneckIds(round, st) : [];
+    const pos = {};
+    round.machines.forEach((m) => pos[m.id] = m);
+    round.supplies.forEach((s) => pos[s.id] = s);
+    pos.sell = { x: round.sell.x, y: round.sell.y };
+    const R_M = 50, R_S = 36, R_SELL = 38;
+    const rad = (id) => (id === 'sell' ? R_SELL : pos[id].to ? R_S : R_M);
+    let belts = '', items = '', piles = '';
+    fl.edges.forEach((e, i) => {
+      const a = pos[e.from], b = pos[e.to];
+      const d = belt(a.x + rad(e.from) - 4, a.y, b.x - rad(e.to) + 4, b.y);
+      belts += `<path d="${d}" class="bed"/><path d="${d}" class="tread"/><path id="belt${r}-${i}" d="${d}" fill="none" stroke="none"/>`;
+      const n = 3, dur = Math.max(1.4, 16 / Math.max(e.flow, 1));
+      for (let k = 0; k < n; k++) items += `<g class="item"><rect x="-5" y="-5" width="10" height="10" rx="2.5"/><animateMotion dur="${dur.toFixed(2)}s" repeatCount="indefinite" begin="${(-k * dur / n).toFixed(2)}s"><mpath href="#belt${r}-${i}"/></animateMotion></g>`;
+      if (nudges && e.pile > 0) {
+        // pile of waiting items sits at the middle of the belt; label goes on the outside of the curve
+        const px = (a.x + rad(e.from) + b.x - rad(e.to)) / 2, py = (a.y + b.y) / 2, up = a.y <= b.y;
+        piles += `<g class="pile" transform="translate(${px},${py})">
+          <rect x="-24" y="-7" width="12" height="12" rx="2.5"/><rect x="-10" y="-7" width="12" height="12" rx="2.5"/><rect x="-17" y="-20" width="12" height="12" rx="2.5"/>
+          <g transform="translate(${up ? 66 : -84},${up ? -46 : 12})"><rect class="chip" x="-62" y="-13" width="124" height="26" rx="13"/><text y="5">+${e.pile}/hr piling up</text></g></g>`;
+      }
+    });
+    const supplies = round.supplies.map((s) => `
+      <g class="node supply" transform="translate(${s.x},${s.y})" data-node="${s.id}">
+        <circle r="${R_S}" class="disc"/>${icon('crate', 28)}
+        <g transform="translate(0,${R_S + 24})"><rect class="label" x="-56" y="-16" width="112" height="42" rx="11"/><text class="nm" y="0">${esc(s.name)}</text><text class="rt" y="18">${s.rate}/hr</text></g>
+      </g>`).join('');
+    const machines = round.machines.map((m) => {
+      const util = fl.prod[m.id] / st.rates[m.id];
+      const circ = 2 * Math.PI * (R_M + 7);
+      return `
+      <g class="node machine ${glow.includes(m.id) ? 'glow' : ''} ${opts.target === m.id ? 'target' : ''} ${opts.bumped === m.id ? 'bumped' : ''}" transform="translate(${m.x},${m.y})" data-node="${m.id}">
+        ${glow.includes(m.id) ? `<circle r="${R_M + 16}" class="halo"/>` : ''}
+        ${opts.target === m.id ? `<circle r="${R_M + 12}" class="ring"/>` : ''}
+        ${nudges ? `<circle r="${R_M + 7}" class="util-bg"/><circle r="${R_M + 7}" class="util" stroke-dasharray="${(circ * util).toFixed(1)} ${circ.toFixed(1)}" transform="rotate(-90)"/>` : ''}
+        <circle r="${R_M}" class="disc"/>${icon(m.icon, 44)}
+        ${glow.includes(m.id) ? `<g transform="translate(0,${-R_M - 26})"><rect class="bn" x="-56" y="-13" width="112" height="26" rx="13"/><text class="bnt" y="4">BOTTLENECK</text></g>` : ''}
+        ${m.id === 'mixer' && st.saving ? `<g transform="translate(0,${-R_M - 26})"><rect class="save" x="-64" y="-13" width="128" height="26" rx="13"/><text class="savet" y="4">−$${st.saving}/hr power</text></g>` : ''}
+        <g transform="translate(0,${R_M + 26})"><rect class="label" x="-56" y="-17" width="112" height="48" rx="12"/><text class="nm" y="0">${esc(m.name)}</text><text class="rt big" y="22">${st.rates[m.id]}/hr</text></g>
+      </g>`;
+    }).join('');
+    const sell = `
+      <g class="node sell" transform="translate(${pos.sell.x},${pos.sell.y})">
+        <circle r="${R_SELL}" class="disc"/><text class="dollar" y="10">$</text>
+        <g transform="translate(0,${R_SELL + 24})"><rect class="label" x="-50" y="-16" width="100" height="42" rx="11"/><text class="nm" y="0">Sell</text><text class="rt" y="18">${usd(round.price)} each</text></g>
+      </g>`;
+    return `<svg class="map" viewBox="0 0 930 610" preserveAspectRatio="xMidYMid meet">
+      <defs><pattern id="dots" width="26" height="26" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.3" fill="rgba(255,226,190,.09)"/></pattern></defs>
+      <rect width="930" height="610" fill="url(#dots)"/>
+      ${belts}${items}${piles}${supplies}${machines}${sell}
+    </svg>
+    <div class="maphud"><div><small>Line makes</small><b>${fl.units}/hr</b></div><div><small>Earning</small><b>${usd(LM.hourly(round, st))}/hr</b></div></div>
+    <div class="inspector hidden" id="inspector"></div>`;
+  }
+
+  function wireMap(r, st) {
+    const round = ROUNDS[r];
+    const fl = LM.flows(round, st);
+    const box = $('#inspector'), wrap = $('.mapwrap');
+    wrap.querySelectorAll('[data-node]').forEach((g) => g.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const id = g.dataset.node;
+      const m = round.machines.find((x) => x.id === id);
+      const s = round.supplies.find((x) => x.id === id);
+      let html;
+      if (m) {
+        const util = Math.round(fl.prod[id] / st.rates[id] * 100);
+        html = `<b>${esc(m.name)}</b><span>${esc(m.role)}</span><div class="kv"><span>Can make</span><b>${st.rates[id]}/hr</b></div><div class="kv"><span>Actually making</span><b>${fl.prod[id]}/hr</b></div>${r === 1 ? `<div class="kv"><span>Busy</span><b>${util}%</b></div>` : ''}`;
+      } else if (s) html = `<b>${esc(s.name)}</b><span>Raw material delivered to the ${esc(round.machines.find((x) => x.id === s.to).name)}</span><div class="kv"><span>Delivered</span><b>${s.rate}/hr</b></div>`;
+      else return;
+      const rect = g.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
+      box.innerHTML = html; box.classList.remove('hidden');
+      let left = rect.left - wr.left + rect.width / 2 - 110, top = rect.bottom - wr.top + 6;
+      left = Math.max(8, Math.min(left, wr.width - 228)); if (top + 140 > wr.height) top = rect.top - wr.top - 140;
+      box.style.left = left + 'px'; box.style.top = top + 'px';
+    }));
+    wrap.addEventListener('click', () => box.classList.add('hidden'));
+  }
+
+  // cash at a given hour for a round, given choices
+  function cashAt(r, hour) {
+    const s = LM.simulate(r, choicesFor(r));
+    let cash = START_CASH;
+    for (const st of s.steps) {
+      const h0 = CHECKPOINTS[st.idx], h1 = CHECKPOINTS[st.idx + 1] ?? SHIFT_HOURS;
+      if (hour < h0) break;
+      const after = st.cashBefore - (st.invested ? st.ev.offer.cost : 0);
+      if (hour <= h1) return after + st.perHour * (hour - h0);
+      cash = st.cashAfter;
+    }
+    return cash;
+  }
+  function stateAtHour(r, hour) {
+    const s = LM.simulate(r, choicesFor(r));
+    let st = LM.initialState(ROUNDS[r]);
+    for (const step of s.steps) if (CHECKPOINTS[step.idx] <= hour) st = { rates: step.rates, saving: LM.simulate(r, choicesFor(r).slice(0, step.idx + 1)).state.saving };
+    return st;
+  }
+
+  function sparkSVG(r, hour) {
+    const W = 210, H = 54;
+    const pts = [];
+    const max = Math.max(LM.bestChoices(r).cash, START_CASH) * 1.05, min = 0;
+    for (let h = 0; h <= Math.min(hour, SHIFT_HOURS) + 1e-9; h += 0.5) pts.push([h, cashAt(r, h)]);
+    if (pts.length && pts[pts.length - 1][0] < hour) pts.push([hour, cashAt(r, hour)]);
+    const xy = pts.map(([h, c]) => `${(h / SHIFT_HOURS * W).toFixed(1)},${(H - (c - min) / (max - min) * H).toFixed(1)}`).join(' ');
+    const ticks = CHECKPOINTS.slice(1).map((h) => `<line x1="${h / SHIFT_HOURS * W}" x2="${h / SHIFT_HOURS * W}" y1="0" y2="${H}" class="tick"/>`).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" class="spark" preserveAspectRatio="none">${ticks}<polyline points="${xy}" /></svg>`;
+  }
+
+  function logHTML(r, upto) {
+    const s = LM.simulate(r, choicesFor(r));
+    return CHECKPOINTS.map((h, i) => {
+      const st = s.steps[i];
+      const o = ROUNDS[r].offers[i];
+      const cur = i === upto;
+      const txt = st && i < upto + (cur ? 0 : 1) ? (st.invested ? `Bought · −${usd(o.cost)}` : (r === 1 && o.sunk ? 'Scrapped' : 'Passed')) : (cur ? 'Deciding now…' : '');
+      return `<li class="${cur ? 'cur' : ''} ${st && !cur ? 'did' : ''}"><span class="h">${String(h).padStart(2, '0')}:00</span><span class="t">${esc(o.title)}<small>${txt}</small></span></li>`;
+    }).join('');
+  }
+
+  function shell(r, { hour, cash, upto, right, map, replay = false }) {
+    const round = ROUNDS[r];
+    const runs = [0, 1].map((ri) => {
+      const ch = choicesFor(ri);
+      const done = ch.length === 3;
+      const active = ri === r;
+      if (ri > r && !done) return `<li class="todo"><span>${ROUNDS[ri].title}</span><b>–</b></li>`;
+      return `<li class="${active ? 'on' : ''}"><span>${ROUNDS[ri].title}</span><b>${done ? usd(LM.simulate(ri, ch).cash) : 'running'}</b></li>`;
+    }).join('');
+    main.innerHTML = `
+      <div class="game">
+        <aside class="side left">
+          <section class="panel goal"><div class="eyebrow">Goal</div><p>Earn as much money as you can in one 24-hour shift.</p></section>
+          <section class="panel shift">
+            <div class="eyebrow">${esc(round.title)}</div>
+            <div class="clockrow"><span id="clockLabel">Hour ${Math.floor(hour)} of ${SHIFT_HOURS}</span></div>
+            <div class="clockbar"><div id="clockFill" style="width:${hour / SHIFT_HOURS * 100}%"></div></div>
+            <div class="cashrow"><small>Cash</small><b id="cash">${usd(cash)}</b></div>
+            <div id="spark">${sparkSVG(r, hour)}</div>
+            ${replay ? `<div class="replay"><input type="range" id="scrub" min="0" max="24" step="0.5" value="${hour}"><div class="rbtns"><button class="btn-ghost sm" id="rFirst">⏮ First</button><button class="btn-primary sm" id="rPlay">▶ Replay</button></div></div>` : ''}
+          </section>
+          <section class="panel log"><div class="eyebrow">Shift log</div><ol>${logHTML(r, upto)}</ol></section>
+          <section class="panel runs"><div class="eyebrow">Tested factories</div><ul>${runs}</ul></section>
+        </aside>
+        <section class="mapwrap">${map}</section>
+        <aside class="side right">${right}</aside>
+      </div>`;
+  }
+
+  function setClock(r, hour, cash) {
+    const l = $('#clockLabel'), f = $('#clockFill'), c = $('#cash'), sp = $('#spark');
+    if (l) l.textContent = `Hour ${Math.floor(hour)} of ${SHIFT_HOURS}`;
+    if (f) f.style.width = (hour / SHIFT_HOURS * 100) + '%';
+    if (c) c.textContent = usd(cash);
+    if (sp) sp.innerHTML = sparkSVG(r, hour);
   }
 
   function stateAt(r, idx) {
-    // machine state + cash at checkpoint idx, given the choices made before it
     const s = LM.simulate(r, choicesFor(r).slice(0, idx));
     return { st: s.state, cash: s.cash };
   }
@@ -240,7 +395,7 @@
     const e = offer.effect;
     if (e.saving) return `Saves ${usd(e.saving)}/hr in running costs`;
     const m = round.machines.find((x) => x.id === e.machine);
-    return `${m.name}: ${st.rates[e.machine]} → ${st.rates[e.machine] + e.rate} units/hr`;
+    return `${m.name}: ${st.rates[e.machine]} → ${st.rates[e.machine] + e.rate} /hr`;
   }
 
   function tagHTML(ev) {
@@ -254,7 +409,7 @@
       <div style="flex:1">
         <div>${never ? 'Never pays back' : `Pays back in ${LM.fmtH(ev.payback)}`} · ${ev.hoursLeft}h left</div>
         <div class="tagbar"><div class="fill" style="width:${fill}%;background:${col};opacity:.35"></div><div class="mark" style="left:${mark}%" title="end of shift"></div></div>
-        <div class="sub">Payback tag: time to earn the cost back vs time left in the shift</div>
+        <div class="sub">Payback tag: time to earn it back vs time left</div>
       </div></div>`;
   }
 
@@ -264,51 +419,45 @@
     const { st, cash } = stateAt(r, idx);
     const ev = LM.evaluateOffer(round, st, idx);
     const o = ev.offer;
-    setHeader({ hour: CHECKPOINTS[idx], cash });
+    setHeader();
     const predictStage = stage === 'predict';
     const tagOn = showTag(r) && !predictStage;
     const scrap = r === 1 && o.sunk > 0;
     let guess = '';
     if (r === 1 && dec.prediction) {
       const right = (dec.prediction === 'yes') === ev.payable;
-      guess = `<div class="guess ${right ? 'right' : 'wrong'}">You predicted “${dec.prediction === 'yes' ? 'Yes, it pays back' : 'No, it won’t'}”. ${right ? 'Spot on.' : 'The tag says otherwise.'}</div>`;
+      guess = `<div class="guess ${right ? 'right' : 'wrong'}">You predicted “${dec.prediction === 'yes' ? 'yes' : 'no'}”. ${right ? 'Spot on.' : 'The tag says otherwise.'}</div>`;
     }
-    main.innerHTML = `
-      <div class="round-title"><h2>${round.title}</h2><span class="muted">${r === 1 ? 'Everyone has the new tools this round' : ''}</span></div>
-      ${lineHTML(r, st, { target: o.effect.machine })}
-      <div class="decision" style="margin-top:14px">
-        <div class="card offer pop">
-          <div class="timer" id="timer"></div>
-          <div class="kicker">Decision ${idx + 1} of 3 · Hour ${CHECKPOINTS[idx]} · ${ev.hoursLeft}h left in the shift</div>
-          <h3>${esc(o.title)}</h3>
-          <p class="blurb">${esc(o.blurb)}</p>
-          <div class="rows">
-            ${o.sunk ? `<div class="row sunk"><span>Already spent on this</span><b>${usd(o.sunk)}</b></div>` : ''}
-            <div class="row"><span>Cost to go ahead now</span><b>${usd(o.cost)}</b></div>
-            <div class="row"><span>What it does</span><b>${esc(effectText(round, st, o))}</b></div>
+    const right = `
+      <div class="panel offer pop">
+        <div class="timer" id="timer"></div>
+        <div class="kicker">Decision ${idx + 1} of 3 · ${ev.hoursLeft}h left</div>
+        <h3>${esc(o.title)}</h3>
+        ${r === 1 && !predictStage ? '' : `<p class="blurb">${esc(o.blurb)}</p>`}
+        <div class="rows">
+          ${o.sunk ? `<div class="row sunk"><span>Already spent</span><b>${usd(o.sunk)}</b></div>` : ''}
+          <div class="row"><span>Cost now</span><b>${usd(o.cost)}</b></div>
+          <div class="row"><span>Effect</span><b>${esc(effectText(round, st, o))}</b></div>
+        </div>
+        ${tagOn ? tagHTML(ev) : ''}
+        ${r === 1 && o.sunk && !predictStage ? `<div class="newmgr pop"><div class="face">🧑‍💼</div><div><b>New Manager check</b>A new manager with no history walks in. The ${usd(o.sunk)} is gone either way. Would <i>they</i> pay ${usd(o.cost)}?</div></div>` : ''}
+      </div>
+      <div class="panel actions pop">
+        ${predictStage ? `
+          <h4>Predict first</h4>
+          <p>Before you see the payback tag: will this pay back before the shift ends?</p>
+          <div class="predict-row"><button class="btn-ghost" data-pred="yes">Yes</button><button class="btn-ghost" data-pred="no">No</button></div>` : `
+          ${guess}
+          <div class="choices">
+            <button class="btn-primary" data-choice="A"><span>Invest ${usd(o.cost)}</span><small>Pay now</small></button>
+            ${scrap
+              ? `<button class="btn-scrap" data-choice="B"><span>Scrap it</span><small>Write off ${usd(o.sunk)}</small></button>`
+              : `<button class="btn-ghost" data-choice="B"><span>Don't invest</span><small>Keep ${usd(o.cost)}</small></button>`}
           </div>
-          ${tagOn ? tagHTML(ev) : ''}
-          ${r === 1 && o.sunk && !predictStage ? `<div class="newmgr pop"><div class="face">🧑‍💼</div><div><b>New Manager check</b>A new manager walks in today with no history. The ${usd(o.sunk)} already spent is gone either way. Would <i>they</i> pay ${usd(o.cost)} for this?</div></div>` : ''}
-        </div>
-        <div class="card panel pop">
-          ${predictStage ? `
-            <h4>Predict first</h4>
-            <p>Before you see the payback tag: will this pay back before the shift ends?</p>
-            <div class="predict-row">
-              <button class="btn-ghost" data-pred="yes">Yes</button>
-              <button class="btn-ghost" data-pred="no">No</button>
-            </div>` : `
-            ${guess}
-            <h4>Your call</h4>
-            <p>Talk it over as a team. If time runs out, nothing is bought.</p>
-            <div class="choices">
-              <button class="btn-primary" data-choice="A"><span>Invest ${usd(o.cost)}</span><small>Pay now</small></button>
-              ${scrap
-                ? `<button class="btn-scrap" data-choice="B"><span>Scrap it</span><small>Write off the ${usd(o.sunk)} in one click</small></button>`
-                : `<button class="btn-ghost" data-choice="B"><span>Don't invest</span><small>Keep ${usd(o.cost)} in the bank</small></button>`}
-            </div>`}
-        </div>
+          <p class="fine">Talk it over. If time runs out, nothing is bought.</p>`}
       </div>`;
+    shell(r, { hour: CHECKPOINTS[idx], cash, upto: idx, right, map: mapSVG(r, st, { target: o.effect.machine }) });
+    wireMap(r, st);
     main.querySelectorAll('[data-pred]').forEach((b) => b.onclick = () => { dec.prediction = b.dataset.pred; dec.stage = 'choose'; persist(); render(); });
     main.querySelectorAll('[data-choice]').forEach((b) => b.onclick = () => choose(b.dataset.choice, false));
     tickTimer();
@@ -319,6 +468,7 @@
     const el = $('#timer');
     const left = DECISION_SECONDS * 1000 - (Date.now() - dec.startedAt);
     if (el) { el.style.width = Math.max(0, left / (DECISION_SECONDS * 10)) + '%'; el.classList.toggle('low', left < 10000); }
+    const t = $('#secs'); if (t) t.textContent = Math.max(0, Math.ceil(left / 1000));
     if (left <= 0) choose('B', true);
   }
   setInterval(tickTimer, 250);
@@ -347,53 +497,67 @@
   function animate(now, id) {
     if (!sim || sim.id !== id) return;
     const p = Math.min(1, (now - sim.t0) / sim.dur);
-    const ease = p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
     const h0 = CHECKPOINTS[sim.idx], h1 = CHECKPOINTS[sim.idx + 1] ?? SHIFT_HOURS;
     const hour = h0 + (h1 - h0) * p;
-    const cash = sim.from + (sim.to - sim.from) * ease;
-    setHeader({ hour, cash });
+    const cash = sim.from + (sim.to - sim.from) * p;
+    setClock(sim.round, hour, cash);
     const big = $('#simHour'), earned = $('#simEarned');
-    if (big) big.textContent = `Hour ${Math.floor(hour)}`;
-    if (earned) earned.textContent = '+' + usd((sim.to - sim.from) * ease);
+    if (big) big.textContent = `${String(Math.floor(hour)).padStart(2, '0')}:00`;
+    if (earned) earned.textContent = '+' + usd((sim.to - sim.from) * p);
     if (p < 1) requestAnimationFrame((t) => animate(t, id));
     else simTimer = setTimeout(() => { if (sim && sim.id === id) { sim = null; render(); } }, 450);
   }
 
   function renderSim() {
     const { round: r, idx, step } = sim;
-    const round = ROUNDS[r];
-    const st = { rates: step.rates, saving: LM.simulate(r, choicesFor(r).slice(0, idx + 1)).state.saving };
     const o = step.ev.offer;
+    const st = { rates: step.rates, saving: LM.simulate(r, choicesFor(r).slice(0, idx + 1)).state.saving };
     const h0 = CHECKPOINTS[idx], h1 = CHECKPOINTS[idx + 1] ?? SHIFT_HOURS;
-    main.innerHTML = `
-      <div class="round-title"><h2>${round.title}</h2></div>
-      ${lineHTML(r, st, { bumped: step.invested ? o.effect.machine : null, run: true })}
-      <div class="card simbanner pop">
-        <div class="spinner"></div>
-        <div style="flex:1">
-          <div class="muted">${step.invested ? `Bought: ${esc(o.title)} (−${usd(o.cost)})` : (r === 1 && o.sunk ? `Scrapped: ${esc(o.title)}` : `Skipped: ${esc(o.title)}`)}</div>
-          <div class="big" id="simHour">Hour ${h0}</div>
-          <div class="muted">Running hours ${h0}–${h1} at ${usd(step.perHour)}/hr</div>
-        </div>
-        <div class="earned" id="simEarned">+$0</div>
+    setHeader();
+    const right = `
+      <div class="panel running pop">
+        <div class="kicker">Running the factory</div>
+        <div class="simclock" id="simHour">${String(h0).padStart(2, '0')}:00</div>
+        <p class="muted">Hours ${h0}–${h1} at ${usd(step.perHour)}/hr</p>
+        <div class="earnbox"><small>Earned so far</small><b id="simEarned">+$0</b></div>
+        <p class="what">${step.invested ? `You bought <b>${esc(o.title)}</b> (−${usd(o.cost)}).` : (r === 1 && o.sunk ? `You scrapped <b>${esc(o.title)}</b>.` : `You passed on <b>${esc(o.title)}</b>.`)}</p>
       </div>`;
+    shell(r, { hour: h0, cash: sim.from, upto: idx + 1, right, map: mapSVG(r, st, { bumped: step.invested ? o.effect.machine : null }) });
+    wireMap(r, st);
   }
 
+  let replayRaf = null;
   function renderDone(r) {
     const s = LM.simulate(r, choicesFor(r));
-    setHeader({ hour: SHIFT_HOURS, cash: s.cash });
-    const offlineNext = OFFLINE ? (r === 0
-      ? '<button class="btn-orange" id="next" style="margin-top:18px">Start Round 2</button>'
-      : '<button class="btn-orange" id="next" style="margin-top:18px">See my Bias Mirror</button>') : '';
-    main.innerHTML = `
-      <div class="center"><div class="card pop">
-        <div class="pill" style="margin-bottom:12px">${ROUNDS[r].title}</div>
-        <h1 class="brand" style="font-size:40px">Shift complete</h1>
-        <p style="font-size:22px">You finished with <b>${usd(s.cash)}</b></p>
-        <p class="muted">${OFFLINE ? '' : 'Waiting for the other teams… eyes on the big screen.'}</p>
+    setHeader();
+    const offlineNext = OFFLINE ? `<button class="btn-orange" id="next" style="width:100%;margin-top:14px">${r === 0 ? 'Start Round 2' : 'See my Bias Mirror'}</button>` : '';
+    const units = s.steps.reduce((n, st) => n + LM.flows(ROUNDS[r], { rates: st.rates, saving: 0 }).units * ((CHECKPOINTS[st.idx + 1] ?? SHIFT_HOURS) - CHECKPOINTS[st.idx]), 0);
+    const right = `
+      <div class="panel done pop">
+        <div class="kicker">Shift complete</div>
+        <div class="final">${usd(s.cash)}</div>
+        <p class="muted">${units} ${ROUNDS[r].product}s made and sold</p>
+        <p>${OFFLINE ? 'Drag the timeline on the left to replay your shift.' : 'Waiting for the other teams. Eyes on the big screen.'}</p>
         ${offlineNext}
-      </div></div>`;
+      </div>`;
+    shell(r, { hour: SHIFT_HOURS, cash: s.cash, upto: 3, right, map: mapSVG(r, s.state), replay: true });
+    wireMap(r, s.state);
     const n = $('#next'); if (n) n.onclick = () => offlineAdvance(r === 0 ? 'r2' : 'final');
+    const scrub = $('#scrub');
+    let lastSt = '';
+    const show = (h) => {
+      setClock(r, h, cashAt(r, h)); scrub.value = h;
+      const st = stateAtHour(r, h); const k = JSON.stringify(st);
+      if (k !== lastSt) { lastSt = k; $('.mapwrap').innerHTML = mapSVG(r, st); wireMap(r, st); }
+    };
+    scrub.oninput = () => { cancelAnimationFrame(replayRaf); show(parseFloat(scrub.value)); };
+    $('#rFirst').onclick = () => { cancelAnimationFrame(replayRaf); show(0); };
+    $('#rPlay').onclick = () => {
+      cancelAnimationFrame(replayRaf);
+      const t0 = performance.now();
+      const step = (now) => { const h = Math.min(SHIFT_HOURS, (now - t0) / 6000 * SHIFT_HOURS); if (!$('#scrub')) return; show(h); if (h < SHIFT_HOURS) replayRaf = requestAnimationFrame(step); };
+      replayRaf = requestAnimationFrame(step);
+    };
   }
 
   function renderReveal() {
