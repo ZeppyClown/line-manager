@@ -251,6 +251,7 @@
         <h1 class="brand" style="font-size:44px">${esc(srv.you.name)}</h1>
         <p>You're in. Waiting for the host to start Round 1.</p>
         <p class="muted" style="font-size:15px">${srv.teamCount} team${srv.teamCount === 1 ? '' : 's'} joined · Each round: 3 decisions, ${DECISION_SECONDS} seconds each. Highest cash wins.</p>
+        <p class="muted" style="font-size:13px;margin-top:10px">Tip: press F11 (Ctrl+Cmd+F on Mac) for full screen</p>
       </div></div>`;
   }
 
