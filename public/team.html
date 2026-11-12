@@ -99,7 +99,7 @@
   /* ================= factory game layout ================= */
   body.playing .wrap { max-width: none; padding: 10px 16px 12px; }
   body.playing header.top { margin-bottom: 8px; }
-  .game { display: grid; grid-template-columns: 236px minmax(0, 1fr) 330px; gap: 14px; height: calc(100vh - 62px); min-height: 480px; }
+  .game { display: grid; grid-template-columns: 236px minmax(0, 1fr) 330px; gap: 14px; height: calc(100vh - 70px); min-height: 480px; }
   .side > * { flex-shrink: 0; }
   .side { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #e2cdb4 transparent; }
   .side .panel { background: #fff; border-radius: 16px; box-shadow: var(--shadow); padding: 14px 16px; }
@@ -206,7 +206,11 @@
   .ghostleg b { color: var(--bad); margin-left: auto; }
   .ghostleg b.tie { color: var(--good); }
   .ghostbox { background: #f6efe6; border-radius: 12px; padding: 10px 12px; font-size: 13.5px; line-height: 1.45; margin: 10px 0; }
-  .row.worth.good { background: #fff3dc; color: var(--brown); }
+  .row b small.worth { display: block; font-size: 12px; font-weight: 700; margin-top: 1px; }
+  small.worth.good { color: #8a5a1a; }
+  small.worth.zero { color: #a5462c; }
+  .strip { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+  .strip .guess, .strip .rulechip { margin: 0 !important; padding: 5px 9px; font-size: 12px; flex: 1 1 auto; border-radius: 9px; }
   .row.worth.zero { background: #f7ebe3; color: #8a4a33; }
   .row.worth b small { display: block; font-size: 11px; font-weight: 600; opacity: .85; }
   .rulechip { background: #fff3dc; border: 1.5px dashed #f2c477; border-radius: 10px; padding: 6px 10px; font-size: 12.5px; margin-bottom: 10px; }
@@ -217,10 +221,13 @@
   .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .badge { background: linear-gradient(135deg, #fff3dc, #ffe2b3); border: 1px solid #f2c477; border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 700; animation: pop .4s cubic-bezier(.2,.8,.2,1) both; }
   .badge:nth-child(2) { animation-delay: .1s; } .badge:nth-child(3) { animation-delay: .2s; } .badge:nth-child(4) { animation-delay: .3s; } .badge:nth-child(5) { animation-delay: .4s; }
+  .revealghost { text-align: left; margin-top: 16px; background: #faf3ea; border-radius: 14px; padding: 12px 14px; }
+  .revealghost .spark { height: 70px; }
   .mirrorspark .spark { height: 52px; margin: 0 0 6px; }
   .rulerecap { margin-top: 18px; padding: 14px 20px; font-size: 15px; }
   @media (max-width: 1100px) { .game { grid-template-columns: 200px minmax(0,1fr) 300px; } }
   @media (max-height: 700px) { .side .goal { display: none; } }
+  @media (max-height: 640px) { .right .actions .fine { display: none; } }
   @media (max-height: 620px) {
     .right .offer h3 { font-size: 16px; }
     .right .kicker { font-size: 10.5px; }

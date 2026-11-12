@@ -211,8 +211,8 @@
       if (!choice) {
         return `
           <div class="tut-choices">
-            <button class="btn-primary" data-choice="paint"><span>Paint it orange</span><small>🎨</small></button>
-            <button class="btn-ghost" data-choice="keep"><span>Keep it brown</span><small>No change</small></button>
+            <button class="btn-primary" data-choice="paint"><span>Invest (free)</span><small>Paint it orange</small></button>
+            <button class="btn-ghost" data-choice="keep"><span>Don't invest</span><small>Keep it brown</small></button>
           </div>
           <p class="tut-fine">Talk it over. If time runs out, nothing is bought.</p>`;
       }
@@ -385,7 +385,7 @@
         place: { to: '.tut-shift', side: 'right', v: 'top' },
         coach: () => ({
           title: 'Clock and cash',
-          body: '<p>The shift stops 3 times: at <b>00:00</b>, <b>08:00</b> and <b>16:00</b>.</p><p>Each time, an offer appears.</p>',
+          body: '<p>The shift stops at <b>00:00</b>, <b>08:00</b> and <b>16:00</b>. Each stop brings one offer.</p><p>Your cash is here. It starts at <b>$500</b>.</p>',
         }),
       },
       { // 5. Practice decision
@@ -398,7 +398,7 @@
           ? { title: choice === 'timeout' ? 'That’s the timer' : 'Nice teamwork! 🙌', body: choice === 'timeout'
               ? '<p>When time runs out, nothing is bought. Real offers work the same way.</p>'
               : '<p>Every offer works like this. The real ones count.</p>' }
-          : { title: 'Practice offer', body: '<p>Talk as a team and pick one. You get <b>40 seconds</b> <span class="tut-soft">(sped up here)</span>.</p><p>If time runs out, nothing is bought.</p><p><span class="tut-tagline">This one doesn’t count</span></p>', next: 'Pick one' },
+          : { title: 'Practice offer', body: '<p>Real offers show what they cost now and what they change. Talk as a team and pick one: you get <b>40 seconds</b> <span class="tut-soft">(sped up here)</span>.</p><p>If time runs out, nothing is bought.</p><p><span class="tut-tagline">This one doesn’t count</span></p>', next: 'Pick one' },
       },
       { // 6. Watch your cash grow
         holes: ['.tut-shift', '.tut-mapwrap', '.tut-running'],
@@ -425,7 +425,7 @@
             badge: '🚀',
             eyebrow: 'Practice done',
             title: name ? `Ready, <span class="tut-name">${name}</span>?` : 'Ready?',
-            body: '3 offers per round, 40 seconds each. Talk fast and decide together.',
+            body: '2 rounds · 3 offers each · 40 seconds per offer. Talk fast, decide together.',
             primary: '<button class="btn-orange tut-big" data-ready>We’re ready <span aria-hidden="true">✓</span></button>',
             extra: soundHint ? `<p class="tut-soundtip">${esc(soundHint)}</p>` : '',
           },

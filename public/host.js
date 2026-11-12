@@ -199,14 +199,14 @@
                 <div class="nm">${esc(t.name)}</div>
                 <div class="tags">
                   <span class="status ${t.ready ? 'ok' : ''} ${justReady ? 'flip' : ''}">${t.ready ? 'Ready ✓' : '<i></i>Learning…'}</span>
-                  <span class="pill ${t.condition}" data-toggle="${t.id}" title="Click to switch Round 1 condition">${t.condition === 'tag' ? 'Tag' : 'Control'}</span>
+                  <span class="pill ${t.condition}" data-toggle="${t.id}" title="Click to switch Round 1 group (A = control, B = treatment)">${t.condition === 'tag' ? 'Group B' : 'Group A'}</span>
                 </div>
               </div>
               <span class="dot ${t.online ? '' : 'off'}" title="${t.online ? 'Online' : 'Offline'}"></span>
               <button class="x" data-remove="${t.id}" title="Remove team">×</button>
             </div>`;
           }).join('') : '<div class="empty">Waiting for teams to join…</div>'}</div>
-          <p class="muted lobbynote">${n} team${n === 1 ? '' : 's'} joined. Odd teams play Round 1 without the payback tag (Control), even teams with it (Tag). Click a badge to switch.</p>
+          <p class="muted lobbynote">${n} team${n === 1 ? '' : 's'} joined. Teams are split into Group A and Group B. Click a badge to switch.</p>
         </div>
       </div>`;
     seenTeams = new Set(st.teams.map((t) => t.id));
@@ -232,7 +232,7 @@
           <tbody>${teams.map((t) => `<tr class="${flashIds.has(t.id) ? 'flash' : ''}">
             <td><span class="dot ${t.online ? '' : 'off'}" style="display:inline-block"></span> ${t.num}</td>
             <td class="tname">${esc(t.name)}</td>
-            ${r === 0 ? `<td><span class="pill ${t.condition}">${t.condition === 'tag' ? 'Tag' : 'Control'}</span></td>`
+            ${r === 0 ? `<td><span class="pill ${t.condition}">${t.condition === 'tag' ? 'Group B' : 'Group A'}</span></td>`
               : `<td>${t.rule ? '<span class="rset ok">Set ✓</span>' : '<span class="rset">Choosing…</span>'}</td>`}
             <td><div class="pips">${pipsFor(t, r)}${t.rounds[r].done ? '<span class="donetag">done</span>' : ''}</div></td>
             <td class="cash" style="font-size:16px">${t.rounds[r].done ? 'Done ✓' : t.rounds[r].choices.length ? 'Playing' : '–'}</td></tr>`).join('')}</tbody></table>
@@ -240,7 +240,7 @@
         </div>
         <div class="card chart livecard">
           <h3>${r === 0 ? 'Round 1 in progress' : 'Round 2 in progress'}</h3>
-          <div class="sub">${r === 0 ? 'Odd teams: no tag · Even teams: payback tag' : 'Every team has all the nudges'}</div>
+          <div class="sub">${r === 0 ? 'Talk it over as a team' : 'New factory, new tools'}</div>
           <div class="ring ${frac >= 1 ? 'full' : ''}">
             <svg viewBox="0 0 200 200" aria-hidden="true">
               <circle cx="100" cy="100" r="86" class="track"/>
@@ -287,9 +287,9 @@
         <p class="lead">Two of the three offers could never earn their cost back before the shift ended. Both came with money already spent.</p>
         <div class="reveal-grid">
           <div class="card chart ${fresh ? 'pop' : ''}"><h3>Unpayable upgrades bought</h3><div class="sub">Lower is better</div>
-            ${bars([{ label: 'Control', note: `avg cash ${avg(s.control)}`, v: c, color: '#a8673c' }, { label: 'Payback tag', note: `avg cash ${avg(s.tag)}`, v: t, color: 'var(--orange)' }], { anim: fresh })}</div>
+            ${bars([{ label: 'Group A · no tag', note: `avg cash ${avg(s.control)}`, v: c, color: '#a8673c' }, { label: 'Group B · payback tag', note: `avg cash ${avg(s.tag)}`, v: t, color: 'var(--orange)' }], { anim: fresh })}</div>
           <div class="card chart ${fresh ? 'pop' : ''}" style="animation-delay:.1s"><h3>Good upgrade taken</h3><div class="sub">The quick-fix paid back in 3h. Higher is better</div>
-            ${bars([{ label: 'Control', v: cg, color: '#a8673c' }, { label: 'Payback tag', v: tg, color: 'var(--orange)' }], { anim: fresh })}</div>
+            ${bars([{ label: 'Group A · no tag', v: cg, color: '#a8673c' }, { label: 'Group B · payback tag', v: tg, color: 'var(--orange)' }], { anim: fresh })}</div>
         </div>
         <div class="card verdict ${fresh ? 'pop late' : ''}"><span class="big">${verdict[0]}</span>
           <span class="vtext"><span>${esc(verdict[1])}${s.all.forced ? ` <small class="muted">(${s.all.forced} unanswered decision${s.all.forced === 1 ? '' : 's'} filled in by the host and left out of these numbers)</small>` : ''}</span>
@@ -419,7 +419,8 @@
         if (learning && !confirm(`${learning} team${learning === 1 ? ' is' : 's are'} still in the tutorial. Start Round 1 anyway?`)) return;
       }
       if (playing && unfinished) cmd({ type: 'forceFinish' });
-      if (next === 'r1' || next === 'r2') countdownThen(() => cmd({ type: 'setPhase', phase: next }));
+      // Start the round straight away so the projector and the laptops count down together.
+      if (next === 'r1' || next === 'r2') { cmd({ type: 'setPhase', phase: next }); countdownThen(() => {}); }
       else cmd({ type: 'setPhase', phase: next });
     });
     on('back', () => { if (confirm(`Go back to ${PHASE_LABEL[prev]}?`)) cmd({ type: 'setPhase', phase: prev }); });

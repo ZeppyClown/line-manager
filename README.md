@@ -29,8 +29,8 @@ HOST_KEY=s102 npm start          # http://localhost:3000  (teams)
 |---|---|---|
 | 5 min before | Open `/host?key=…` on the projector laptop. | — |
 | 0:20 | Show the lobby (QR and URL). | Teams join on one laptop each, then a **1-minute tutorial** runs on their laptops. The lobby counts "N of 7 teams ready". |
-| ~1:20 | **Start Round 1 ▶** (3-2-1 countdown) | Odd teams play without the payback tag (Control), even teams with it (Tag). 3 offers, 40 s each. |
-| ~3:20 | **Reveal Round 1 results** | "Eyes on the big screen". Talk about H1. |
+| ~1:20 | **Start Round 1 ▶** (3-2-1 countdown) | Odd teams are **Group A** (no payback tag, the control), even teams are **Group B** (payback tag). The projector only says "Group A / B" until the results, so nobody is primed. 3 offers, 40 s each. |
+| ~3:20 | **Reveal Round 1 results** | Laptops now show the 👻 ghost manager (perfect play) next to the team's own cash. Talk about H1. |
 | ~4:15 | **Start Round 2 ▶** | A 20-second **rule card**, then 3 offers with all 8 nudges. |
 | ~6:45 | **Reveal Round 2 results** → **Final leaderboard 🏆** | Bias Mirror, ghost manager comparison and badges on each laptop. |
 | After | **Export CSV** | — |

@@ -345,17 +345,17 @@
     if (el) el.style.width = Math.max(0, left / (RULE_SECONDS * 10)) + '%';
     if (t) t.textContent = Math.max(0, Math.ceil(left / 1000));
   }
-  function pickRule(id) {
+  function pickRule(id, timedOut = false) {
     if (ruleFor() || playRound() !== 1) return;
     fx.sound(id === 'none' ? 'click' : 'badge');
     if (OFFLINE) { srv.you.rule = id; persist(); }
-    else { localRule = id; persist(); if (ws && wsOpen) ws.send(JSON.stringify({ type: 'rule', rule: id })); }
+    else { localRule = id; persist(); if (ws && wsOpen) ws.send(JSON.stringify({ type: 'rule', rule: id, timedOut })); }
     screenKey = ''; render();
   }
   setInterval(() => {
     if (screenKey !== 'rule' || inactive) return;
     updateRuleBadge();
-    if (ruleStartedAt && Date.now() - ruleStartedAt > RULE_SECONDS * 1000) pickRule('none');
+    if (ruleStartedAt && Date.now() - ruleStartedAt > RULE_SECONDS * 1000) pickRule('none', true);
   }, 250);
 
   function renderLobby() {
@@ -429,7 +429,7 @@
     }).join('');
   }
 
-  function shell(r, { hour, cash, upto, right, map, replay = false, deciding = false, ghost = false }) {
+  function shell(r, { hour, cash, upto, right, map, replay = false, deciding = false, ghost = false, done = false }) {
     const round = ROUNDS[r];
     const runs = [0, 1].map((ri) => {
       const ch = choicesFor(ri);
@@ -441,7 +441,7 @@
     main.innerHTML = `
       <div class="game">
         <aside class="side left">
-          <section class="panel goal"><div class="eyebrow">Goal</div><p>Earn as much money as you can in one 24-hour shift.</p></section>
+          <section class="panel goal${done ? ' hidden' : ''}"><div class="eyebrow">Goal</div><p>Earn as much money as you can in one 24-hour shift.</p></section>
           <section class="panel shift">
             <div class="eyebrow">${esc(round.title)}</div>
             <div class="clockrow"><span id="clockLabel">Hour ${Math.floor(hour)} of ${SHIFT_HOURS}</span></div>
@@ -481,10 +481,10 @@
 
   // Nudge 6, money translation: say what the effect is worth in dollars per hour (Round 2).
   function worthRow(round, st, ev) {
-    if (ev.gain > 0) return `<div class="row worth good"><span>Worth</span><b>+${usd(ev.gain)}/hr</b></div>`;
+    if (ev.gain > 0) return `<small class="worth good">Worth +${usd(ev.gain)}/hr</small>`;
     const after = LM.applyEffect(st, ev.offer.effect);
     const lim = LM.bottleneckIds(round, after).map((id) => round.machines.find((m) => m.id === id).name).join(' & ');
-    return `<div class="row worth zero"><span>Worth</span><b>+$0/hr <small>${esc(lim)} still limits the line</small></b></div>`;
+    return `<small class="worth zero">Worth +$0/hr · ${esc(lim)} still limits the line</small>`;
   }
 
   function tagHTML(ev) {
@@ -516,7 +516,7 @@
     let guess = '';
     if (r === 1 && dec.prediction) {
       const right = (dec.prediction === 'yes') === ev.payable;
-      guess = `<div class="guess ${right ? 'right' : 'wrong'}">You predicted “${dec.prediction === 'yes' ? 'yes' : 'no'}”. ${right ? 'Spot on.' : 'The tag says otherwise.'}</div>`;
+      guess = `<div class="guess ${right ? 'right' : 'wrong'}">${right ? '✓' : '✗'} Your guess: ${dec.prediction === 'yes' ? 'Yes' : 'No'}${right ? '' : ' (the tag disagrees)'}</div>`;
     }
     const right = `
       <div class="panel offer pop">
@@ -527,20 +527,18 @@
         <div class="rows">
           ${o.sunk ? `<div class="row sunk"><span>Already spent</span><b>${usd(o.sunk)}</b></div>` : ''}
           <div class="row"><span>Cost now</span><b>${usd(o.cost)}</b></div>
-          <div class="row"><span>Effect</span><b>${esc(effectText(round, st, o))}</b></div>
-          ${r === 1 ? worthRow(round, st, ev) : ''}
+          <div class="row"><span>Effect</span><b>${esc(effectText(round, st, o))}${r === 1 ? worthRow(round, st, ev) : ''}</b></div>
         </div>
         ${tagOn ? tagHTML(ev) : ''}
-        ${r === 1 && o.sunk && !predictStage ? `<div class="newmgr pop"><div class="face">🧑‍💼</div><div><b>New Manager check</b>A new manager with no history walks in. The ${usd(o.sunk)} is gone either way. Would <i>they</i> pay ${usd(o.cost)}?</div></div>` : ''}
+        ${r === 1 && o.sunk && !predictStage ? `<div class="newmgr pop"><div class="face">🧑‍💼</div><div><b>New Manager check</b>The ${usd(o.sunk)} is gone either way. Would someone with no history pay ${usd(o.cost)}?</div></div>` : ''}
       </div>
       <div class="panel actions pop">
         ${predictStage ? `
           ${r === 1 && ruleFor() && ruleFor() !== 'none' ? `<div class="rulechip">📌 Your rule: <b>${esc(ruleInfo(ruleFor()).short)}</b></div>` : ''}
           <h4>Predict first</h4>
-          <p>Before you see the payback tag: will this pay back before the shift ends?</p>
+          <p>Quick guess before we show the numbers: will this earn back its cost before the shift ends?</p>
           <div class="predict-row"><button class="btn-ghost" data-pred="yes">Yes</button><button class="btn-ghost" data-pred="no">No</button></div>` : `
-          ${guess}
-          ${r === 1 && ruleFor() && ruleFor() !== 'none' ? `<div class="rulechip">📌 Your rule: <b>${esc(ruleInfo(ruleFor()).short)}</b></div>` : ''}
+          ${(guess || (r === 1 && ruleFor() && ruleFor() !== 'none')) ? `<div class="strip">${guess}${r === 1 && ruleFor() && ruleFor() !== 'none' ? `<div class="rulechip">📌 <b>${esc(ruleInfo(ruleFor()).short)}</b></div>` : ''}</div>` : ''}
           <div class="choices">
             <button class="btn-primary" data-choice="A"><span>Invest ${usd(o.cost)}</span><small>Pay now</small></button>
             ${scrap
@@ -640,14 +638,15 @@
         <div class="kicker">Shift complete</div>
         <div class="final">${usd(s.cash)}</div>
         <p class="muted">${units} ${ROUNDS[r].product}s made and sold</p>
-        <div class="ghostbox">${LM.bestChoices(r).cash > s.cash
+        ${!OFFLINE ? '<div class="ghostbox">👻 When everyone has finished, the <b>ghost manager</b> shows up on your screen. Can you beat it?</div>' : ''}
+        ${!OFFLINE ? '' : `<div class="ghostbox">${LM.bestChoices(r).cash > s.cash
           ? `👻 The <b>ghost manager</b> made <b>${usd(LM.bestChoices(r).cash)}</b> in this factory. You were <b>${usd(LM.bestChoices(r).cash - s.cash)}</b> behind. Press <b>Replay</b> to race it.`
-          : `👻 You matched the <b>ghost manager</b>, the best possible score. Flawless!`}</div>
+          : `👻 You matched the <b>ghost manager</b>, the best possible score. Flawless!`}</div>`}
         ${notice ? `<p class="guess wrong">${esc(notice)}</p>` : ''}
         <p>${OFFLINE ? 'Drag the timeline on the left to replay your shift.' : 'Waiting for the other teams. Eyes on the big screen.'}</p>
         ${offlineNext}
       </div>`;
-    shell(r, { hour: SHIFT_HOURS, cash: s.cash, upto: 3, right, map: mapSVG(r, s.state), replay: true, ghost: true });
+    shell(r, { hour: SHIFT_HOURS, cash: s.cash, upto: 3, right, map: mapSVG(r, s.state), replay: true, ghost: OFFLINE, done: true });
     if (celebrate) {
       celebrate = false;
       fx.sound('complete');
@@ -659,7 +658,7 @@
     const scrub = $('#scrub');
     let lastSt = '';
     const show = (h) => {
-      setClock(r, h, cashAt(r, h), true); scrub.value = h;
+      setClock(r, h, cashAt(r, h), OFFLINE); scrub.value = h;
       const st = stateAtHour(r, h); const k = JSON.stringify(st);
       if (k !== lastSt) { lastSt = k; $('.mapwrap').innerHTML = mapSVG(r, st); wireMap(r, st); }
     };
@@ -679,18 +678,21 @@
     setHeader({ cash: s.cash });
     main.innerHTML = `
       <div class="center"><div class="card pop">
-        <div style="font-size:54px">👀</div>
-        <h1 class="brand" style="font-size:40px">Eyes on the big screen</h1>
+        <div style="font-size:46px">👀</div>
+        <h1 class="brand" style="font-size:36px">Eyes on the big screen</h1>
         <p>${ROUNDS[r].title}: you finished with <b>${usd(s.cash)}</b>.</p>
+        ${choicesFor(r).length ? `<div class="revealghost"><div class="eyebrow">Your cash vs the 👻 ghost manager (perfect play)</div>${sparkSVG(r, SHIFT_HOURS, true, choicesFor(r))}${ghostLegend(r, s.cash)}</div>` : ''}
       </div></div>`;
+    if (choicesFor(r).length && !seen(`ghost-${srv.you.id}-${r}`)) { markSeen(`ghost-${srv.you.id}-${r}`); fx.sound(s.cash >= LM.bestChoices(r).cash ? 'badge' : 'click'); }
   }
 
   function renderFinal() {
     setTimeout(showBadgeToasts, 50);
     const rounds = [0, 1].map((r) => {
       const rec = srv.you.rounds[r];
-      const m = LM.mirror(r, choicesFor(r)).map((d) => {
+      const m = LM.mirror(r, choicesFor(r)).map((d0) => { let d = d0;
         if (rec.forced && rec.forced[d.idx]) return { ...d, ok: null, bias: null, delta: 0, text: 'The round ended before your team decided, so nothing was bought. Not counted.' };
+        if (!d.ok && d.choice === 'B' && !LM.mirror(r, choicesFor(r)).some((e) => e.idx < d.idx && e.choice === 'B')) d = { ...d, bias: 'Missed a good deal' };
         if (rec.timedOut && rec.timedOut[d.idx]) return { ...d, bias: d.ok ? null : 'Default effect: time ran out', text: 'Time ran out, so the default kicked in and nothing was bought. ' + d.text.replace(/^You (walked away from|passed|skipped)/, 'That meant passing on') };
         return d;
       });
@@ -754,10 +756,10 @@
     if (ch(0)[2] === 'A' && ch(1)[2] === 'A') out.push({ icon: '🎯', name: 'Bottleneck Hunter', why: 'Bought the upgrade that fixed the slowest machine in both rounds' });
     const preds = predictionsFor(1); const s2 = LM.simulate(1, ch(1));
     if (s2.steps.length === 3 && s2.steps.every((st) => preds[st.idx] && ((preds[st.idx] === 'yes') === st.ev.payable))) out.push({ icon: '🔮', name: 'Oracle', why: 'Every Round 2 prediction was right' });
-    const ms = [0, 1].flatMap((r) => (rec(r).ms || []).filter((m, i) => m > 0 && real(r, i)));
-    if (ms.length >= 4 && ms.reduce((a, b) => a + b, 0) / ms.length < 10000) out.push({ icon: '⚡', name: 'Quick Draw', why: 'Average decision under 10 seconds' });
-    const ratio = (x) => x.cash / x.best;
-    if (rounds[0].cash < rounds[0].best && ratio(rounds[1]) > ratio(rounds[0]) + 0.02) out.push({ icon: '📈', name: 'Comeback', why: 'Closer to the ghost manager in Round 2 than in Round 1' });
+    const noTimeouts = [0, 1].every((r) => ch(r).length === 3 && !(rec(r).timedOut || []).some(Boolean));
+    if (noTimeouts) out.push({ icon: '😎', name: 'Cool Head', why: 'Decided every offer before the timer ran out' });
+    const wrong = (r) => LM.mirror(r, ch(r)).filter((d) => !d.ok && real(r, d.idx)).length;
+    if (ch(0).length === 3 && ch(1).length === 3 && wrong(1) < wrong(0)) out.push({ icon: '📈', name: 'Comeback', why: 'Fewer biased calls in Round 2 than in Round 1' });
     if (rounds.some((x) => ch(x.r).length === 3 && x.cash >= x.best)) out.push({ icon: '👻', name: 'Ghost Buster', why: 'Matched the ghost manager (perfect play) in a round' });
     if (ruleFor() === 'payback' && rounds[1].cash >= rounds[1].best) out.push({ icon: '📌', name: 'Rule Keeper', why: 'Set a forward-looking rule and followed it perfectly' });
     return out;
@@ -767,7 +769,7 @@
     if (badgesShown || !srv || srv.phase !== 'final') return;
     badgesShown = true;
     const rounds = [0, 1].map((r) => ({ r, cash: LM.simulate(r, choicesFor(r)).cash, best: LM.bestChoices(r).cash }));
-    earnBadges(rounds).forEach((b, i) => setTimeout(() => { fx.sound('badge'); fx.toast(`Badge unlocked: ${b.name} ${b.icon}`, { tone: 'good' }); }, 700 + i * 900));
+    earnBadges(rounds).forEach((b, i) => setTimeout(() => fx.sound('badge'), 500 + i * 350));
     if (srv.rank === 1) setTimeout(() => fx.confetti({ count: 200 }), 300);
   }
 

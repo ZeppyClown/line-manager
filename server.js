@@ -146,7 +146,7 @@ function handleTeam(ws, msg) {
     const t = game.teams.find(x => x.id === ws.teamId);
     if (!t || game.phase !== 'r2' || t.rule) return broadcast();
     if (!RULES.includes(msg.rule)) return;
-    t.rule = msg.rule; saveNow();
+    t.rule = msg.rule; t.ruleTimedOut = !!msg.timedOut; saveNow();
     return broadcast();
   }
   if (msg.type === 'decide') {
@@ -209,7 +209,7 @@ function csv() {
   for (const t of game.teams) {
     t.rounds.forEach((r, ri) => {
       const sim = LM.simulate(ri, r.choices);
-      sim.steps.forEach(s => rows.push([t.num, t.name, t.condition, ri + 1, s.idx + 1, s.ev.offer.title, s.invested ? 'invest' : 'skip', s.ev.payable, r.predictions[s.idx] ?? '', r.timedOut[s.idx] ? 1 : 0, r.ms[s.idx] ?? '', r.forced && r.forced[s.idx] ? 1 : 0, ri === 1 ? (t.rule || '') : '', sim.done ? sim.cash : '']));
+      sim.steps.forEach(s => rows.push([t.num, t.name, t.condition, ri + 1, s.idx + 1, s.ev.offer.title, s.invested ? 'invest' : 'skip', s.ev.payable, r.predictions[s.idx] ?? '', r.timedOut[s.idx] ? 1 : 0, r.ms[s.idx] ?? '', r.forced && r.forced[s.idx] ? 1 : 0, ri === 1 ? (t.rule ? t.rule + (t.ruleTimedOut ? ' (timed out)' : '') : '') : '', sim.done ? sim.cash : '']));
     });
   }
   const safe = v => (typeof v === 'string' && /^[=+\-@\t\r]/.test(v) ? "'" + v : v);

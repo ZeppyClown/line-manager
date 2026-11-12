@@ -99,7 +99,7 @@ practice factory, not Plant A or Plant B, and its practice decision does not cou
    (Gollwitzer 1999), pre-commitment. Logged (server `rule`, CSV `rule_r2`); host shows how many teams picked each rule.
 8. **Ghost manager** (after each round): on the done screen, replay and Bias Mirror, a dashed "ghost manager" cash line
    (perfect play) runs next to the team's own line, with the gap in dollars. Mechanism: counterfactual feedback.
-   Shown only after the team's round is over, never during play.
+   Shown on the laptops only once the host reveals the round's results (so early finishers can't call out answers), and on the Bias Mirror.
 
 ## Fun layer (no effect on economics or the experiment)
 Synthesised sound effects with a mute toggle (click, coin, buy, scrap, last-5-seconds tick, round start, round complete,
@@ -107,3 +107,6 @@ badge), 3-2-1 countdown at round start, coins popping from Sell during the simul
 final podium, end-of-game badges on the Bias Mirror (e.g. Cold Blooded: scrapped every sunk-cost offer in Round 2;
 Bottleneck Hunter: took the good upgrade in both rounds; Oracle: every prediction right; Quick Draw: average decision
 under 10 s; Comeback: closer to perfect in Round 2 than Round 1; Ghost Buster: matched the ghost manager).
+
+
+Host labels: before the Round 1 reveal the projector calls the conditions **Group A** (control) and **Group B** (payback tag) and never mentions the tag.
