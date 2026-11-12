@@ -31,7 +31,12 @@ function save() {
   saveTimer = setTimeout(() => fs.writeFile(STATE_FILE, JSON.stringify(game), () => {}), 200);
 }
 
-function newRoundRecord() { return { choices: [], predictions: [], timedOut: [], ms: [] }; }
+function saveNow() {
+  clearTimeout(saveTimer);
+  try { game.updatedAt = Date.now(); fs.writeFileSync(STATE_FILE, JSON.stringify(game)); } catch (_) {}
+}
+
+function newRoundRecord() { return { choices: [], predictions: [], timedOut: [], ms: [], forced: [] }; }
 
 function teamView(t) {
   const rounds = t.rounds.map((r, i) => {
@@ -52,6 +57,7 @@ function stats() {
       const sim = LM.simulate(ri, r.choices);
       const gs = [groups.all, groups[t.condition]];
       for (const s of sim.steps) {
+        if (r.forced && r.forced[s.idx]) { for (const g of gs) g.forced++; continue; }
         for (const g of gs) {
           if (s.ev.payable) { g.goodSeen++; if (s.invested) g.goodTaken++; }
           else { g.badSeen++; if (s.invested) g.badTaken++; }
@@ -66,7 +72,7 @@ function stats() {
     out[ri] = groups;
   }
   return out;
-  function blank() { return { badSeen: 0, badTaken: 0, goodSeen: 0, goodTaken: 0, predSeen: 0, predRight: 0, done: 0, cashSum: 0 }; }
+  function blank() { return { forced: 0, badSeen: 0, badTaken: 0, goodSeen: 0, goodTaken: 0, predSeen: 0, predRight: 0, done: 0, cashSum: 0 }; }
 }
 
 function publicState() {
@@ -109,13 +115,18 @@ function handleTeam(ws, msg) {
   if (msg.type === 'join') {
     let t = msg.teamId && game.teams.find(x => x.id === msg.teamId);
     if (!t) {
+      const byKey = msg.joinKey && game.teams.find(x => x.joinKey === String(msg.joinKey));
+      if (byKey) t = byKey;
+    }
+    if (!t) {
       if (msg.teamId && !msg.name) return send(ws, { type: 'needName' });
+      if (!['lobby', 'r1'].includes(game.phase)) return send(ws, { type: 'error', message: 'Round 1 is already over, so new teams can\'t join now.' });
       if (game.teams.length >= MAX_TEAMS) return send(ws, { type: 'error', message: 'The game is full.' });
       const name = cleanName(msg.name);
       if (!name) return send(ws, { type: 'error', message: 'Please enter a team name.' });
       if (game.teams.some(x => x.name.toLowerCase() === name.toLowerCase())) return send(ws, { type: 'error', message: 'That name is taken.' });
       const num = (game.teams.reduce((m, x) => Math.max(m, x.num), 0)) + 1;
-      t = { id: crypto.randomBytes(8).toString('hex'), num, name, condition: num % 2 ? 'control' : 'tag', rounds: [newRoundRecord(), newRoundRecord()] };
+      t = { id: crypto.randomBytes(8).toString('hex'), joinKey: msg.joinKey ? String(msg.joinKey).slice(0, 40) : null, num, name, condition: num % 2 ? 'control' : 'tag', rounds: [newRoundRecord(), newRoundRecord()] };
       game.teams.push(t);
     }
     ws.role = 'team'; ws.teamId = t.id;
@@ -127,8 +138,8 @@ function handleTeam(ws, msg) {
     if (!t) return;
     const ri = msg.round, idx = msg.idx;
     if (ri !== 0 && ri !== 1) return;
-    // Accept during that round's play phase or later (late/offline-queued answers), never before.
-    if (PHASES.indexOf(game.phase) < PHASES.indexOf(PLAY_PHASE[ri])) return;
+    // Accept only while that round is being played; results screens must stay stable.
+    if (game.phase !== PLAY_PHASE[ri]) return broadcast();
     const r = t.rounds[ri];
     if (idx !== r.choices.length || idx > 2) return broadcast(); // duplicate/out of order: resync client
     if (msg.choice !== 'A' && msg.choice !== 'B') return;
@@ -136,6 +147,9 @@ function handleTeam(ws, msg) {
     r.predictions[idx] = msg.prediction === 'yes' || msg.prediction === 'no' ? msg.prediction : null;
     r.timedOut[idx] = !!msg.timedOut;
     r.ms[idx] = Math.max(0, Math.min(600000, Number(msg.ms) || 0));
+    if (!r.forced) r.forced = [];
+    r.forced[idx] = false;
+    saveNow();
     return broadcast();
   }
 }
@@ -147,7 +161,7 @@ function handleHost(ws, msg) {
       game.phase = msg.phase; break;
     case 'toggleCondition': {
       const t = game.teams.find(x => x.id === msg.teamId);
-      if (t) t.condition = t.condition === 'control' ? 'tag' : 'control';
+      if (t && game.phase === 'lobby' && !t.rounds[0].choices.length) t.condition = t.condition === 'control' ? 'tag' : 'control';
       break;
     }
     case 'removeTeam':
@@ -157,7 +171,8 @@ function handleHost(ws, msg) {
       if (ri == null) return;
       for (const t of game.teams) {
         const r = t.rounds[ri];
-        while (r.choices.length < 3) { const i = r.choices.length; r.choices.push('B'); r.predictions[i] = null; r.timedOut[i] = true; r.ms[i] = 0; }
+        if (!r.forced) r.forced = [];
+        while (r.choices.length < 3) { const i = r.choices.length; r.choices.push('B'); r.predictions[i] = null; r.timedOut[i] = true; r.ms[i] = 0; r.forced[i] = true; }
       }
       break;
     }
@@ -173,14 +188,15 @@ const PUB = path.join(__dirname, 'public');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' };
 
 function csv() {
-  const rows = [['team_num', 'team', 'condition_r1', 'round', 'decision', 'offer', 'choice', 'payable', 'prediction', 'timed_out', 'decide_ms', 'cash_after_round']];
+  const rows = [['team_num', 'team', 'condition_r1', 'round', 'decision', 'offer', 'choice', 'payable', 'prediction', 'timed_out', 'decide_ms', 'forced_by_host', 'cash_after_round']];
   for (const t of game.teams) {
     t.rounds.forEach((r, ri) => {
       const sim = LM.simulate(ri, r.choices);
-      sim.steps.forEach(s => rows.push([t.num, t.name, t.condition, ri + 1, s.idx + 1, s.ev.offer.title, s.invested ? 'invest' : 'skip', s.ev.payable, r.predictions[s.idx] ?? '', r.timedOut[s.idx] ? 1 : 0, r.ms[s.idx] ?? '', sim.done ? sim.cash : '']));
+      sim.steps.forEach(s => rows.push([t.num, t.name, t.condition, ri + 1, s.idx + 1, s.ev.offer.title, s.invested ? 'invest' : 'skip', s.ev.payable, r.predictions[s.idx] ?? '', r.timedOut[s.idx] ? 1 : 0, r.ms[s.idx] ?? '', r.forced && r.forced[s.idx] ? 1 : 0, sim.done ? sim.cash : '']));
     });
   }
-  return rows.map(r => r.map(v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v).join(',')).join('\n');
+  const safe = v => (typeof v === 'string' && /^[=+\-@\t\r]/.test(v) ? "'" + v : v);
+  return rows.map(r => r.map(safe).map(v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v).join(',')).join('\n');
 }
 
 const server = http.createServer(async (req, res) => {
@@ -188,8 +204,11 @@ const server = http.createServer(async (req, res) => {
   const p = url.pathname;
   if (p === '/healthz') { res.writeHead(200); return res.end('ok'); }
   if (p === '/qr.svg') {
-    const target = url.searchParams.get('u') || '';
-    const svg = await QRCode.toString(target.slice(0, 300), { type: 'svg', margin: 1, color: { dark: '#4a1f0c', light: '#00000000' } });
+    const target = (url.searchParams.get('u') || '').slice(0, 300);
+    if (!target) { res.writeHead(400); return res.end('missing u'); }
+    let svg;
+    try { svg = await QRCode.toString(target, { type: 'svg', margin: 1, color: { dark: '#4a1f0c', light: '#00000000' } }); }
+    catch (_) { res.writeHead(400); return res.end('bad qr'); }
     res.writeHead(200, { 'Content-Type': TYPES['.svg'], 'Cache-Control': 'no-store' });
     return res.end(svg);
   }
@@ -209,10 +228,12 @@ const server = http.createServer(async (req, res) => {
 });
 
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 4096 });
+wss.on('error', (e) => console.error('wss error', e.message));
 wss.on('connection', (ws) => {
   ws.isAlive = true;
   sockets.add(ws);
   ws.on('pong', () => { ws.isAlive = true; });
+  ws.on('error', () => { try { ws.terminate(); } catch (_) {} });
   ws.on('message', (raw) => {
     let msg; try { msg = JSON.parse(raw); } catch (_) { return; }
     if (!msg || typeof msg !== 'object') return;
@@ -232,3 +253,6 @@ setInterval(() => {
 }, 20000);
 
 server.listen(PORT, () => console.log(`Line Manager on :${PORT}  (host: /host?key=${HOST_KEY})`));
+
+process.on('uncaughtException', (e) => console.error('uncaught', e));
+process.on('unhandledRejection', (e) => console.error('unhandled', e));

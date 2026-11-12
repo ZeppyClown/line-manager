@@ -29,8 +29,9 @@
   const cmd = (m) => ws && wsOpen && ws.send(JSON.stringify(m));
 
   // ---------- helpers ----------
-  function pipsFor(t, r) {
+  function pipsFor(t, r, neutral) {
     const ch = t.rounds[r].choices;
+    if (neutral) return [0, 1, 2].map((i) => `<span class="pip ${i < ch.length ? 'done' : ''}"></span>`).join('');
     const sim = LM.simulate(r, ch);
     return [0, 1, 2].map((i) => {
       const s = sim.steps[i];
@@ -95,16 +96,8 @@
   function renderLive(r) {
     const teams = [...st.teams].sort((a, b) => b.rounds[r].cash - a.rounds[r].cash || a.num - b.num);
     const done = st.teams.filter((t) => t.rounds[r].done).length;
-    const s = st.stats[r];
-    const chart = r === 0
-      ? bars([
-        { label: 'Control', note: `no tag · ${s.control.badTaken}/${s.control.badSeen} offers`, v: pct(s.control.badTaken, s.control.badSeen), color: '#a8673c' },
-        { label: 'Payback tag', note: `${s.tag.badTaken}/${s.tag.badSeen} offers`, v: pct(s.tag.badTaken, s.tag.badSeen), color: 'var(--orange)' },
-      ], { height: 280 })
-      : bars([
-        { label: 'Round 1', note: `${st.stats[0].all.badTaken}/${st.stats[0].all.badSeen} offers`, v: pct(st.stats[0].all.badTaken, st.stats[0].all.badSeen), color: '#a8673c' },
-        { label: 'Round 2', note: `all nudges · ${s.all.badTaken}/${s.all.badSeen}`, v: pct(s.all.badTaken, s.all.badSeen), color: 'var(--orange)' },
-      ], { height: 280 });
+    const decided = st.teams.reduce((n, t) => n + t.rounds[r].choices.length, 0);
+    const possible = st.teams.length * 3;
     main.innerHTML = `
       <div class="live">
         <div class="card board">
@@ -113,14 +106,16 @@
             <td><span class="dot ${t.online ? '' : 'off'}" style="display:inline-block"></span> ${t.num}</td>
             <td style="font-weight:700;font-size:20px">${esc(t.name)}</td>
             ${r === 0 ? `<td><span class="pill ${t.condition}">${t.condition === 'tag' ? 'Tag' : 'Control'}</span></td>` : ''}
-            <td><div class="pips">${pipsFor(t, r)}</div></td>
+            <td><div class="pips">${pipsFor(t, r, true)}</div></td>
             <td class="cash">${t.rounds[r].choices.length ? usd(t.rounds[r].cash) : '–'}</td></tr>`).join('')}</tbody></table>
-          <p class="muted" style="font-size:14px;margin:12px 0 0">${done} of ${st.teams.length} teams finished · <span class="pip bad" style="display:inline-block;width:12px;height:12px;vertical-align:-1px"></span> bought an upgrade that can't pay back · <span class="pip good" style="display:inline-block;width:12px;height:12px;vertical-align:-1px"></span> bought a good one · <span class="pip skip" style="display:inline-block;width:12px;height:12px;vertical-align:-1px"></span> skipped</p>
+          <p class="muted" style="font-size:14px;margin:12px 0 0">${done} of ${st.teams.length} teams finished · which choices were right stays hidden until the reveal</p>
         </div>
-        <div class="card chart">
-          <h3>Upgrades bought that could not pay back</h3>
-          <div class="sub">Share of unpayable offers each group paid for (live)</div>
-          ${chart}
+        <div class="card chart" style="text-align:center">
+          <h3>${r === 0 ? 'Round 1 in progress' : 'Round 2 in progress'}</h3>
+          <div class="sub">${r === 0 ? 'Odd teams: no tag · Even teams: payback tag' : 'Every team has all five nudges'}</div>
+          <div style="font-size:120px;font-weight:800;line-height:1;margin:30px 0 6px">${done}<span style="font-size:48px;color:var(--muted)">/${st.teams.length}</span></div>
+          <div class="muted" style="font-size:18px">teams finished · ${decided} of ${possible} decisions made</div>
+          <div style="height:12px;background:#efe3d4;border-radius:99px;margin:26px 10px 0;overflow:hidden"><div style="height:100%;width:${possible ? decided / possible * 100 : 0}%;background:var(--orange);transition:width .4s"></div></div>
         </div>
       </div>`;
   }
@@ -145,7 +140,7 @@
           <div class="card chart pop"><h3>Good upgrade taken</h3><div class="sub">The quick-fix paid back in 3h. Higher is better</div>
             ${bars([{ label: 'Control', v: cg, color: '#a8673c' }, { label: 'Payback tag', v: tg, color: 'var(--orange)' }])}</div>
         </div>
-        <div class="card verdict pop"><span class="big">${verdict[0]}</span><span>${esc(verdict[1])}</span></div>
+        <div class="card verdict pop"><span class="big">${verdict[0]}</span><span>${esc(verdict[1])}${s.all.forced ? ` <small class="muted">(${s.all.forced} unanswered decision${s.all.forced === 1 ? '' : 's'} filled in by the host and left out of these numbers)</small>` : ''}</span></div>
       </div>`;
   }
 
@@ -163,7 +158,7 @@
           <div class="card chart pop"><h3>Did we over-correct?</h3><div class="sub">Good upgrade taken · higher is better</div>
             ${bars([{ label: 'Round 1', v: pct(a.goodTaken, a.goodSeen), color: '#a8673c' }, { label: 'Round 2', v: pct(b.goodTaken, b.goodSeen), note: 'Freezer 3 fast-chill', color: 'var(--good)' }])}</div>
         </div>
-        <div class="card verdict pop"><span class="big">🔮</span><span>Predictions right: ${b.predSeen ? `${b.predRight}/${b.predSeen} (${pct(b.predRight, b.predSeen)}%)` : '–'}${ctrlTeams.length ? ` · Teams that had no tag in Round 1: ${pct(r1c.badTaken, r1c.badSeen) ?? '–'}% → ${pct(r2c.badTaken, r2c.badSeen) ?? '–'}% unpayable bought` : ''}</span></div>
+        <div class="card verdict pop"><span class="big">🔮</span><span>Predictions right: ${b.predSeen ? `${b.predRight}/${b.predSeen} (${pct(b.predRight, b.predSeen)}%)` : '–'}${ctrlTeams.length ? ` · Teams that had no tag in Round 1: ${pct(r1c.badTaken, r1c.badSeen) ?? '–'}% → ${pct(r2c.badTaken, r2c.badSeen) ?? '–'}% unpayable bought` : ''}${b.forced ? ` <small class="muted">· ${b.forced} host-filled decision${b.forced === 1 ? '' : 's'} excluded</small>` : ''}</span></div>
       </div>`;
   }
 

@@ -16,6 +16,31 @@
   let screenKey = '';
   let joinError = '';
   let busyJoin = false;
+  let simTimer = null, simSeq = 0;
+  const PLAY_PHASE = ['r1', 'r2'];
+  const PHASE_ORDER = ['lobby', 'r1', 'r1-reveal', 'r2', 'r2-reveal', 'final'];
+  const LOCAL_KEY = 'lm-team-local';
+
+  // Persist in-flight work so a refresh mid-decision keeps the clock, prediction and unsent choices.
+  function persist() {
+    if (OFFLINE) return;
+    try { localStorage.setItem(LOCAL_KEY, JSON.stringify({ teamId: localStorage.getItem(LS_KEY), pending, localChoices, dec })); } catch (_) {}
+  }
+  function restore() {
+    if (OFFLINE) return;
+    try {
+      const d = JSON.parse(localStorage.getItem(LOCAL_KEY) || 'null');
+      if (!d || !d.teamId || d.teamId !== localStorage.getItem(LS_KEY)) return;
+      pending = Array.isArray(d.pending) ? d.pending : [];
+      localChoices = Array.isArray(d.localChoices) && d.localChoices.length === 2 ? d.localChoices : [[], []];
+      dec = d.dec && typeof d.dec.startedAt === 'number' ? d.dec : null;
+    } catch (_) {}
+  }
+  function joinKey() {
+    let k = localStorage.getItem('lm-join-key');
+    if (!k) { k = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('lm-join-key', k); }
+    return k;
+  }
 
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const usd = (n) => '$' + Math.round(n).toLocaleString('en-US');
@@ -28,10 +53,12 @@
       wsOpen = true; backoff = 1000; updateConn();
       const id = localStorage.getItem(LS_KEY);
       if (id) ws.send(JSON.stringify({ type: 'join', teamId: id }));
+      else if (localStorage.getItem('lm-join-pending')) ws.send(JSON.stringify({ type: 'join', joinKey: joinKey() }));
     };
     ws.onmessage = (e) => { try { onMsg(JSON.parse(e.data)); } catch (_) {} };
     ws.onclose = () => {
       wsOpen = false; joined = false; updateConn();
+      if (busyJoin) { busyJoin = false; joinError = 'Connection dropped. Press Join again.'; render(true); }
       setTimeout(connect, backoff); backoff = Math.min(backoff * 1.6, 5000);
     };
   }
@@ -39,27 +66,32 @@
 
   function onMsg(msg) {
     if (msg.type === 'joined') {
-      localStorage.setItem(LS_KEY, msg.teamId); joined = true; busyJoin = false; joinError = '';
+      localStorage.setItem(LS_KEY, msg.teamId); localStorage.removeItem('lm-join-pending'); joined = true; busyJoin = false; joinError = '';
       flush();
     } else if (msg.type === 'state') {
       const prevId = srv && srv.you && srv.you.id;
       srv = msg;
       if (prevId && prevId !== msg.you.id) resetLocal();
-      // Drop local choices the server contradicts (e.g. host force-finished).
+      // The server is authoritative: drop local choices it contradicts (host force-finish), and once a
+      // round is no longer being played, anything it never received is void.
       for (const r of [0, 1]) {
         const s = msg.you.rounds[r].choices;
-        if (localChoices[r].length && s.length && localChoices[r].slice(0, s.length).join() !== s.join()) localChoices[r] = s.slice();
+        const roundOpen = msg.phase === PLAY_PHASE[r];
+        if (!roundOpen || localChoices[r].slice(0, s.length).join() !== s.join()) localChoices[r] = s.slice();
       }
-      pending = pending.filter((p) => msg.you.rounds[p.round].choices.length <= p.idx);
+      pending = pending.filter((p) => msg.phase === PLAY_PHASE[p.round] && msg.you.rounds[p.round].choices.length <= p.idx);
+      persist();
       render();
     } else if (msg.type === 'needName' || msg.type === 'kicked') {
-      localStorage.removeItem(LS_KEY); srv = null; joined = false; busyJoin = false; resetLocal(); render();
+      localStorage.removeItem(LS_KEY); localStorage.removeItem(LOCAL_KEY); localStorage.removeItem('lm-join-pending'); localStorage.removeItem('lm-join-key');
+      srv = null; joined = false; busyJoin = false; resetLocal(); render();
     } else if (msg.type === 'error') {
       joinError = msg.message; busyJoin = false; render(true);
     }
   }
 
-  function resetLocal() { localChoices = [[], []]; pending = []; dec = null; sim = null; }
+  function resetLocal() { localChoices = [[], []]; pending = []; dec = null; cancelSim(); }
+  function cancelSim() { sim = null; simSeq++; clearTimeout(simTimer); }
 
   function flush() {
     if (OFFLINE || !wsOpen || !joined) return;
@@ -122,19 +154,21 @@
   // ---------- render ----------
   function render(force) {
     let key, fn;
+    if (srv && sim && sim.round !== playRound()) cancelSim();
+    if (srv && dec && dec.round !== playRound()) { dec = null; persist(); }
     if (!srv || !srv.you) { key = 'join'; fn = renderJoin; }
     else if (srv.phase === 'lobby') { key = 'lobby'; fn = renderLobby; }
     else if (playRound() != null) {
       const r = playRound();
       const n = choicesFor(r).length;
       if (sim && sim.round === r) { key = `sim-${r}-${sim.idx}`; fn = renderSim; }
-      else if (n >= 3) { dec = null; key = `done-${r}`; fn = () => renderDone(r); }
+      else if (n >= 3) { dec = null; key = `done-${r}-${choicesFor(r).join('')}`; fn = () => renderDone(r); }
       else {
-        if (!dec || dec.round !== r || dec.idx !== n) dec = { round: r, idx: n, stage: r === 1 ? 'predict' : 'choose', prediction: null, startedAt: Date.now() };
+        if (!dec || dec.round !== r || dec.idx !== n) { dec = { round: r, idx: n, stage: r === 1 ? 'predict' : 'choose', prediction: null, startedAt: Date.now() }; persist(); }
         key = `dec-${r}-${n}-${dec.stage}`; fn = renderDecision;
       }
-    } else if (srv.phase === 'final') { dec = null; key = 'final'; fn = renderFinal; }
-    else { dec = null; key = 'reveal-' + srv.phase; fn = renderReveal; }
+    } else if (srv.phase === 'final') { key = 'final-' + JSON.stringify([choicesFor(0), choicesFor(1), srv.rank, srv.leaderboard]); fn = renderFinal; }
+    else { key = 'reveal-' + srv.phase + '-' + choicesFor(0).join('') + choicesFor(1).join(''); fn = renderReveal; }
     if (key !== screenKey || force) { screenKey = key; fn(); }
     else if (key === 'lobby') fn();
   }
@@ -161,7 +195,8 @@
       if (OFFLINE) return offlineJoin(v);
       if (!wsOpen) { joinError = 'Connecting to the game… try again in a moment.'; return render(true); }
       busyJoin = true; $('#joinBtn').disabled = true;
-      ws.send(JSON.stringify({ type: 'join', name: v }));
+      localStorage.setItem('lm-join-pending', '1');
+      ws.send(JSON.stringify({ type: 'join', name: v, joinKey: joinKey() }));
     };
   }
 
@@ -274,7 +309,7 @@
             </div>`}
         </div>
       </div>`;
-    main.querySelectorAll('[data-pred]').forEach((b) => b.onclick = () => { dec.prediction = b.dataset.pred; dec.stage = 'choose'; render(); });
+    main.querySelectorAll('[data-pred]').forEach((b) => b.onclick = () => { dec.prediction = b.dataset.pred; dec.stage = 'choose'; persist(); render(); });
     main.querySelectorAll('[data-choice]').forEach((b) => b.onclick = () => choose(b.dataset.choice, false));
     tickTimer();
   }
@@ -289,12 +324,12 @@
   setInterval(tickTimer, 250);
 
   function choose(choice, timedOut) {
-    if (!dec) return;
+    if (!dec || dec.round !== playRound()) return;
     const { round: r, idx } = dec;
     const msg = { type: 'decide', round: r, idx, choice, prediction: dec.prediction, timedOut, ms: Date.now() - dec.startedAt };
     dec = null;
     localChoices[r] = choicesFor(r).slice(0, idx).concat(choice);
-    if (OFFLINE) offlineApply(msg); else { pending.push(msg); flush(); }
+    if (OFFLINE) offlineApply(msg); else { pending.push(msg); persist(); flush(); }
     startSim(r, idx);
   }
 
@@ -302,13 +337,15 @@
     const s = LM.simulate(r, choicesFor(r));
     const step = s.steps[idx];
     const from = step.cashBefore - (step.invested ? step.ev.offer.cost : 0);
-    sim = { round: r, idx, t0: performance.now(), dur: 4200, from, to: step.cashAfter, step };
+    cancelSim();
+    const id = simSeq;
+    sim = { id, round: r, idx, t0: performance.now(), dur: 4200, from, to: step.cashAfter, step };
     render();
-    requestAnimationFrame(animate);
+    requestAnimationFrame((t) => animate(t, id));
   }
 
-  function animate(now) {
-    if (!sim) return;
+  function animate(now, id) {
+    if (!sim || sim.id !== id) return;
     const p = Math.min(1, (now - sim.t0) / sim.dur);
     const ease = p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
     const h0 = CHECKPOINTS[sim.idx], h1 = CHECKPOINTS[sim.idx + 1] ?? SHIFT_HOURS;
@@ -318,8 +355,8 @@
     const big = $('#simHour'), earned = $('#simEarned');
     if (big) big.textContent = `Hour ${Math.floor(hour)}`;
     if (earned) earned.textContent = '+' + usd((sim.to - sim.from) * ease);
-    if (p < 1) requestAnimationFrame(animate);
-    else setTimeout(() => { sim = null; render(); }, 450);
+    if (p < 1) requestAnimationFrame((t) => animate(t, id));
+    else simTimer = setTimeout(() => { if (sim && sim.id === id) { sim = null; render(); } }, 450);
   }
 
   function renderSim() {
@@ -373,7 +410,9 @@
 
   function renderFinal() {
     const rounds = [0, 1].map((r) => ({ r, m: LM.mirror(r, choicesFor(r)), cash: LM.simulate(r, choicesFor(r)).cash, best: LM.bestChoices(r).cash }));
-    const total = rounds.reduce((s, x) => s + x.cash, 0);
+    const played = (x) => choicesFor(x.r).length > 0;
+    const total = srv.you.total != null ? srv.you.total : rounds.reduce((s, x) => s + (played(x) ? x.cash : 0), 0);
+    const allPlayed = rounds.every((x) => choicesFor(x.r).length === 3);
     const lost = rounds.reduce((s, x) => s + x.m.reduce((a, d) => a - d.delta, 0), 0);
     const sunkLost = rounds.reduce((s, x) => s + x.m.filter((d) => !d.ok && d.choice === 'A').reduce((a, d) => a - d.delta, 0), 0);
     const preds = predictionsFor(1);
@@ -383,7 +422,8 @@
     setHeader({ cash: total });
     const col = (x) => `
       <div class="card pop">
-        <h3><span>${ROUNDS[x.r].title}</span><span>${usd(x.cash)} <small class="muted" style="font-size:13px">/ best ${usd(x.best)}</small></span></h3>
+        <h3><span>${ROUNDS[x.r].title}</span><span>${played(x) ? usd(x.cash) : '–'} <small class="muted" style="font-size:13px">/ best ${usd(x.best)}</small></span></h3>
+        ${played(x) ? '' : '<p class="muted">Your team did not play this round.</p>'}
         ${x.m.map((d) => `
           <div class="mi"><div class="mark ${d.ok ? 'ok' : 'no'}">${d.ok ? '✓' : '✗'}</div>
             <div><div class="t">${esc(d.title)} · ${d.choice === 'A' ? 'Invested' : 'Passed'}</div>
@@ -395,7 +435,7 @@
         <div class="rank">#${srv.rank || '–'}</div>
         <div><div class="muted" style="font-weight:600;text-transform:uppercase;letter-spacing:.1em;font-size:12px">Your Bias Mirror</div>
           <h2 style="font-size:30px">${esc(srv.you.name)}: ${usd(total)}</h2>
-          <div class="lost">${lost > 0 ? `Biased calls cost you <b style="color:var(--bad)">${usd(lost)}</b>${sunkLost ? `, ${usd(sunkLost)} of it from paying into things that could not pay back` : ''}.` : 'A perfect manager. No money lost to bias.'}
+          <div class="lost">${lost > 0 ? `Biased calls cost you <b style="color:var(--bad)">${usd(lost)}</b>${sunkLost ? `, ${usd(sunkLost)} of it from paying into things that could not pay back` : ''}.` : (allPlayed ? 'A perfect manager. No money lost to bias.' : '')}
           ${predMade ? ` Round 2 predictions: ${predRight}/${predMade} right.` : ''}</div></div>
         <div class="muted" style="text-align:right;font-size:14px">Sunk money is gone.<br><b style="color:var(--brown)">Look forward.</b></div>
       </div>
@@ -404,6 +444,6 @@
   }
 
   // ---------- boot ----------
-  if (!OFFLINE) connect();
+  if (!OFFLINE) { restore(); connect(); }
   render();
 })();
