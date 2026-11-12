@@ -41,7 +41,7 @@
     }).join('');
   }
 
-  function bars(items, { height = 300 } = {}) {
+  function bars(items, { height = Math.max(150, Math.min(300, H() - 560)) } = {}) {
     const max = 100;
     return `<div class="bars" style="height:${height}px">${items.map((it) => `
         <div class="bar"><div class="val">${it.v == null ? '–' : it.v + '%'}</div>
@@ -66,8 +66,16 @@
     $('#kf').onsubmit = (e) => { e.preventDefault(); key = $('#k').value.trim(); cmd({ type: 'host', key }); };
   }
 
+  // If the host page is opened via localhost, show the laptop's network address instead (students can't reach localhost).
+  let joinUrl = location.origin;
+  fetch('/info').then((r) => r.json()).then((i) => {
+    const local = /^(localhost|127\.|\[::1\])/.test(location.hostname);
+    if (i.publicUrl) joinUrl = i.publicUrl; else if (local && i.lanUrl) joinUrl = i.lanUrl;
+    if (st && st.phase === 'lobby') render();
+  }).catch(() => {});
+  const H = () => window.innerHeight;
   function renderLobby() {
-    const url = location.origin;
+    const url = joinUrl;
     main.innerHTML = `
       <div class="lobby">
         <div class="card joinbox">
@@ -127,7 +135,7 @@
     const avg = (g) => g.done ? usd(g.cashSum / g.done) : '–';
     let verdict;
     if (c == null || t == null) verdict = ['🤷', 'Not enough data in one of the groups.'];
-    else if (t < c) verdict = ['✅', `H1 supported: with the payback tag, teams bought ${c - t} points fewer unpayable upgrades.`];
+    else if (t < c) verdict = ['✅', `H1 supported: with the payback tag, teams bought ${c - t} percentage points fewer unpayable upgrades.`];
     else if (t === c) verdict = ['➖', 'No difference this time: the tag alone did not change choices.'];
     else verdict = ['❌', 'H1 not supported here: tag teams bought more unpayable upgrades.'];
     main.innerHTML = `
@@ -165,7 +173,8 @@
   function renderFinal() {
     const lb = st.leaderboard;
     const top = [lb[1], lb[0], lb[2]];
-    const heights = [170, 230, 130], colors = ['#a8673c', 'var(--orange)', '#c99a74'], places = [2, 1, 3];
+    const k = H() < 820 ? 0.55 : 1;
+    const heights = [170 * k, 230 * k, 130 * k], colors = ['#a8673c', 'var(--orange)', '#c99a74'], places = top.map((t) => t && t.rank);
     main.innerHTML = `
       <div class="reveal" style="text-align:center">
         <h1 class="brand">Final leaderboard</h1>
@@ -173,7 +182,7 @@
         <div class="podium">${top.map((t, i) => t ? `
           <div class="pod pop" style="animation-delay:${[.3, .6, 0][i]}s"><div class="nm">${esc(t.name)}</div><div class="cash">${usd(t.total)}</div>
           <div class="block" style="height:${heights[i]}px;background:${colors[i]}">${places[i]}</div></div>` : '<div class="pod"></div>').join('')}</div>
-        ${lb.length > 3 ? `<div class="card rest"><ol>${lb.slice(3).map((t, i) => `<li><span>${i + 4}. ${esc(t.name)}</span><span>${usd(t.total)}</span></li>`).join('')}</ol></div>` : ''}
+        ${lb.length > 3 ? `<div class="card rest"><ol>${lb.slice(3).map((t) => `<li><span>${t.rank}. ${esc(t.name)}</span><span>${usd(t.total)}</span></li>`).join('')}</ol></div>` : ''}
         <p style="font-size:30px;font-weight:800;margin-top:30px">“Sunk money is gone. Look forward.”</p>
       </div>`;
   }
@@ -190,7 +199,8 @@
       <div class="spacer"></div>
       ${prev ? `<button class="btn-ghost" id="back">◀ Back</button>` : ''}
       ${playing ? `<button class="btn-ghost" id="force" ${unfinished ? '' : 'disabled'}>Finish for slow teams (${unfinished})</button>` : ''}
-      ${st.phase === 'final' ? `<a href="/export.csv?key=${encodeURIComponent(key)}"><button class="btn-ghost">Export CSV</button></a><button class="btn-ghost" id="reset">Reset game</button>` : ''}
+      ${st.phase === 'final' ? `<a href="/export.csv?key=${encodeURIComponent(key)}"><button class="btn-ghost">Export CSV</button></a>` : ''}
+      <button class="btn-ghost" id="reset" title="Delete all teams and results">Reset</button>
       ${next ? `<button class="btn-orange" id="next" ${st.phase === 'lobby' && !st.teams.length ? 'disabled' : ''}>${nextLabel}</button>` : ''}`;
     const on = (id, f) => { const el = $('#' + id); if (el) el.onclick = f; };
     on('next', () => {

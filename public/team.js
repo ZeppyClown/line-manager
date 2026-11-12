@@ -3,7 +3,7 @@
   const $ = (s) => document.querySelector(s);
   const main = $('#main');
   const params = new URLSearchParams(location.search);
-  const OFFLINE = params.has('offline');
+  let OFFLINE = params.has('offline');
   const LS_KEY = 'lm-team-id';
   const { ROUNDS, CHECKPOINTS, SHIFT_HOURS, START_CASH, DECISION_SECONDS } = LM;
 
@@ -20,14 +20,24 @@
   const PLAY_PHASE = ['r1', 'r2'];
   const PHASE_ORDER = ['lobby', 'r1', 'r1-reveal', 'r2', 'r2-reveal', 'final'];
   const LOCAL_KEY = 'lm-team-local';
+  const OFFLINE_KEY = 'lm-offline-game';
+  let notice = '';           // shown on the done screen if the server overrode a click
+  let inactive = false;      // another tab took over this team
+  let lastMsgAt = Date.now();
+  const tabId = Math.random().toString(36).slice(2);
+  const tabs = 'BroadcastChannel' in window ? new BroadcastChannel('lm-tabs') : null;
 
   // Persist in-flight work so a refresh mid-decision keeps the clock, prediction and unsent choices.
   function persist() {
-    if (OFFLINE) return;
+    if (inactive) return;
+    if (OFFLINE) { try { localStorage.setItem(OFFLINE_KEY, JSON.stringify({ srv, dec })); } catch (_) {} return; }
     try { localStorage.setItem(LOCAL_KEY, JSON.stringify({ teamId: localStorage.getItem(LS_KEY), pending, localChoices, dec })); } catch (_) {}
   }
   function restore() {
-    if (OFFLINE) return;
+    if (OFFLINE) {
+      try { const d = JSON.parse(localStorage.getItem(OFFLINE_KEY) || 'null'); if (d && d.srv && d.srv.you) { srv = d.srv; dec = d.dec || null; } } catch (_) {}
+      return;
+    }
     try {
       const d = JSON.parse(localStorage.getItem(LOCAL_KEY) || 'null');
       if (!d || !d.teamId || d.teamId !== localStorage.getItem(LS_KEY)) return;
@@ -55,14 +65,38 @@
       if (id) ws.send(JSON.stringify({ type: 'join', teamId: id }));
       else if (localStorage.getItem('lm-join-pending')) ws.send(JSON.stringify({ type: 'join', joinKey: joinKey() }));
     };
-    ws.onmessage = (e) => { try { onMsg(JSON.parse(e.data)); } catch (_) {} };
-    ws.onclose = () => {
-      wsOpen = false; joined = false; updateConn();
-      if (busyJoin) { busyJoin = false; joinError = 'Connection dropped. Press Join again.'; render(true); }
-      setTimeout(connect, backoff); backoff = Math.min(backoff * 1.6, 5000);
-    };
+    ws.onmessage = (e) => { lastMsgAt = Date.now(); try { onMsg(JSON.parse(e.data)); } catch (_) {} };
+    ws.onclose = onClosed;
   }
-  setInterval(() => { if (wsOpen) ws.send('{"type":"ping"}'); }, 25000);
+  function onClosed() {
+    wsOpen = false; joined = false; updateConn();
+    if (busyJoin) { busyJoin = false; joinError = 'Connection dropped. Press Join again.'; render(true); }
+    if (OFFLINE || inactive) return;
+    setTimeout(connect, backoff); backoff = Math.min(backoff * 1.6, 5000);
+  }
+  function dropSocket() { if (!ws) return; const old = ws; old.onclose = null; old.onmessage = null; try { old.close(); } catch (_) {} ws = null; onClosed(); }
+  // Heartbeat: a silent Wi-Fi drop never fires "close", so treat 20 s of silence as a disconnect.
+  setInterval(() => {
+    if (!wsOpen) return;
+    if (Date.now() - lastMsgAt > 20000) return dropSocket();
+    ws.send('{"type":"ping"}');
+  }, 8000);
+
+  // One live tab per laptop: the newest tab takes over, older ones pause.
+  if (tabs) tabs.onmessage = (e) => {
+    if (e.data && e.data.type === 'claim' && e.data.tabId !== tabId && !inactive) {
+      inactive = true; dec = null; cancelSim();
+      if (ws) { const old = ws; old.onclose = null; try { old.close(); } catch (_) {} ws = null; wsOpen = false; }
+      screenKey = ''; renderInactive();
+    }
+  };
+  function claimTab() { if (tabs) tabs.postMessage({ type: 'claim', tabId }); }
+  function renderInactive() {
+    main.innerHTML = `<div class="center"><div class="card pop"><h1 class="brand" style="font-size:34px">Open in another tab</h1>
+      <p>This team is being played in another browser tab. Use that one, or continue here.</p>
+      <button class="btn-primary" id="useHere">Use this tab</button></div></div>`;
+    $('#useHere').onclick = () => { inactive = false; claimTab(); restore(); screenKey = ''; if (OFFLINE) render(); else connect(); };
+  }
 
   function onMsg(msg) {
     if (msg.type === 'joined') {
@@ -80,6 +114,10 @@
         if (!roundOpen || localChoices[r].slice(0, s.length).join() !== s.join()) localChoices[r] = s.slice();
       }
       pending = pending.filter((p) => msg.phase === PLAY_PHASE[p.round] && msg.you.rounds[p.round].choices.length <= p.idx);
+      if (sim) {
+        const sc = msg.you.rounds[sim.round].choices[sim.idx];
+        if (sc && sc !== sim.step.choice) { cancelSim(); notice = 'The host ended the round before your last click arrived, so nothing was bought.'; }
+      }
       persist();
       render();
     } else if (msg.type === 'needName' || msg.type === 'kicked') {
@@ -94,7 +132,7 @@
   function cancelSim() { sim = null; simSeq++; clearTimeout(simTimer); }
 
   function flush() {
-    if (OFFLINE || !wsOpen || !joined) return;
+    if (OFFLINE || inactive || !wsOpen || !joined) return;
     for (const p of pending) ws.send(JSON.stringify(p));
   }
 
@@ -107,23 +145,30 @@
   }
 
   // ---------- offline emulation ----------
-  function offlineJoin(name) {
-    const cond = params.get('cond') === 'tag' ? 'tag' : 'control';
+  function goOffline() {
+    OFFLINE = true;
+    if (ws) { const old = ws; old.onclose = null; try { old.close(); } catch (_) {} ws = null; wsOpen = false; }
+    try { history.replaceState(null, '', '/?offline'); } catch (_) {}
+    srv = null; resetLocal(); restore(); screenKey = ''; render();
+  }
+  function offlineJoin(name, condChoice) {
+    const cond = (condChoice || params.get('cond')) === 'tag' ? 'tag' : 'control';
     srv = { phase: 'r1', you: { id: 'offline', num: 1, name, condition: cond, rounds: [rec(), rec()] }, teamCount: 1 };
-    function rec() { return { choices: [], predictions: [], timedOut: [], ms: [] }; }
-    render();
+    function rec() { return { choices: [], predictions: [], timedOut: [], ms: [], forced: [] }; }
+    persist(); render();
   }
   function offlineApply(m) {
     const r = srv.you.rounds[m.round];
     r.choices.push(m.choice); r.predictions[m.idx] = m.prediction; r.timedOut[m.idx] = m.timedOut; r.ms[m.idx] = m.ms;
+    persist();
   }
   function offlineAdvance(phase) {
     srv.phase = phase;
     if (phase === 'final') {
       const total = srv.you.rounds.reduce((s, r, i) => s + LM.simulate(i, r.choices).cash, 0);
-      srv.rank = 1; srv.leaderboard = [{ num: 1, name: srv.you.name, total }];
+      srv.rank = 1; srv.leaderboard = [{ num: 1, name: srv.you.name, total, rank: 1 }];
     }
-    render();
+    persist(); render();
   }
 
   // ---------- derived ----------
@@ -146,6 +191,7 @@
 
   // ---------- render ----------
   function render(force) {
+    if (inactive) return;
     let key, fn;
     if (srv && sim && sim.round !== playRound()) cancelSim();
     if (srv && dec && dec.round !== playRound()) { dec = null; persist(); }
@@ -178,15 +224,18 @@
           <button class="btn-primary" id="joinBtn" type="submit">Join</button>
         </form>
         <div class="err">${esc(joinError)}</div>
-        ${OFFLINE ? '<p class="muted" style="font-size:13px">Offline mode: this laptop plays on its own.</p>'
-          : '<p class="muted" style="font-size:13px;margin-top:18px">Wi-Fi trouble? <a href="?offline" style="color:inherit">Play offline</a></p>'}
+        ${OFFLINE ? `<div class="offgrp"><span>Offline mode: this laptop plays on its own. Your group:</span>
+            <label><input type="radio" name="cond" value="control" ${params.get('cond') === 'tag' ? '' : 'checked'}> Odd team</label>
+            <label><input type="radio" name="cond" value="tag" ${params.get('cond') === 'tag' ? 'checked' : ''}> Even team</label></div>`
+          : '<p class="muted" style="font-size:13px;margin-top:18px">Wi-Fi trouble? <button type="button" class="linkbtn" id="goOff">Play offline</button></p>'}
       </div></div>`;
     const name = $('#name');
+    const off = $('#goOff'); if (off) off.onclick = goOffline;
     $('#joinForm').onsubmit = (e) => {
       e.preventDefault();
       const v = name.value.trim();
       if (!v) { joinError = 'Please enter a team name.'; return render(true); }
-      if (OFFLINE) return offlineJoin(v);
+      if (OFFLINE) { const c = main.querySelector('input[name=cond]:checked'); return offlineJoin(v, c && c.value); }
       if (!wsOpen) { joinError = 'Connecting to the game… try again in a moment.'; return render(true); }
       busyJoin = true; $('#joinBtn').disabled = true;
       localStorage.setItem('lm-join-pending', '1');
@@ -338,18 +387,20 @@
     return `<svg viewBox="0 0 ${W} ${H}" class="spark" preserveAspectRatio="none">${ticks}<polyline points="${xy}" /></svg>`;
   }
 
-  function logHTML(r, upto) {
+  function logHTML(r, upto, deciding) {
     const s = LM.simulate(r, choicesFor(r));
     return CHECKPOINTS.map((h, i) => {
       const st = s.steps[i];
       const o = ROUNDS[r].offers[i];
-      const cur = i === upto;
-      const txt = st && i < upto + (cur ? 0 : 1) ? (st.invested ? `Bought · −${usd(o.cost)}` : (r === 1 && o.sunk ? 'Scrapped' : 'Passed')) : (cur ? 'Deciding now…' : '');
+      const cur = deciding && i === upto;
+      const rec = srv && srv.you && srv.you.rounds[r];
+      const how = rec && rec.forced && rec.forced[i] ? 'Round ended · nothing bought' : rec && rec.timedOut && rec.timedOut[i] ? 'Time ran out · nothing bought' : null;
+      const txt = st && i < upto ? (st.invested ? `Bought · −${usd(o.cost)}` : how || (r === 1 && o.sunk ? 'Scrapped' : 'Passed')) : (cur ? 'Deciding now…' : '');
       return `<li class="${cur ? 'cur' : ''} ${st && !cur ? 'did' : ''}"><span class="h">${String(h).padStart(2, '0')}:00</span><span class="t">${esc(o.title)}<small>${txt}</small></span></li>`;
     }).join('');
   }
 
-  function shell(r, { hour, cash, upto, right, map, replay = false }) {
+  function shell(r, { hour, cash, upto, right, map, replay = false, deciding = false }) {
     const round = ROUNDS[r];
     const runs = [0, 1].map((ri) => {
       const ch = choicesFor(ri);
@@ -370,8 +421,8 @@
             <div id="spark">${sparkSVG(r, hour)}</div>
             ${replay ? `<div class="replay"><input type="range" id="scrub" min="0" max="24" step="0.5" value="${hour}"><div class="rbtns"><button class="btn-ghost sm" id="rFirst">⏮ First</button><button class="btn-primary sm" id="rPlay">▶ Replay</button></div></div>` : ''}
           </section>
-          <section class="panel log"><div class="eyebrow">Shift log</div><ol>${logHTML(r, upto)}</ol></section>
-          <section class="panel runs"><div class="eyebrow">Tested factories</div><ul>${runs}</ul></section>
+          <section class="panel log"><div class="eyebrow">Shift log</div><ol>${logHTML(r, upto, deciding)}</ol></section>
+          <section class="panel runs"><div class="eyebrow">Your rounds</div><ul>${runs}</ul></section>
         </aside>
         <section class="mapwrap">${map}</section>
         <aside class="side right">${right}</aside>
@@ -408,7 +459,7 @@
       <div class="ico">${ev.payable ? '✓' : '✗'}</div>
       <div style="flex:1">
         <div>${never ? 'Never pays back' : `Pays back in ${LM.fmtH(ev.payback)}`} · ${ev.hoursLeft}h left</div>
-        <div class="tagbar"><div class="fill" style="width:${fill}%;background:${col};opacity:.35"></div><div class="mark" style="left:${mark}%" title="end of shift"></div></div>
+        <div class="tagbar"><div class="fill" style="width:${fill}%;background:${col};opacity:.35"></div><div class="mark" style="left:${mark}%" title="end of shift"></div><span class="marklabel" style="${mark > 50 ? `right:${100 - mark}%;margin-right:5px` : `left:${mark}%;margin-left:8px`}">end of shift</span></div>
         <div class="sub">Payback tag: time to earn it back vs time left</div>
       </div></div>`;
   }
@@ -423,6 +474,7 @@
     const predictStage = stage === 'predict';
     const tagOn = showTag(r) && !predictStage;
     const scrap = r === 1 && o.sunk > 0;
+    const msLeft = DECISION_SECONDS * 1000 - (Date.now() - dec.startedAt);
     let guess = '';
     if (r === 1 && dec.prediction) {
       const right = (dec.prediction === 'yes') === ev.payable;
@@ -431,7 +483,7 @@
     const right = `
       <div class="panel offer pop">
         <div class="timer" id="timer"></div>
-        <div class="kicker">Decision ${idx + 1} of 3 · ${ev.hoursLeft}h left</div>
+        <div class="kicker"><span>Decision ${idx + 1} of 3 · ${ev.hoursLeft}h of shift left</span><span class="secs${msLeft < 10000 ? ' low' : ''}"><span id="secs">${Math.max(0, Math.ceil(msLeft / 1000))}</span>s</span></div>
         <h3>${esc(o.title)}</h3>
         ${r === 1 && !predictStage ? '' : `<p class="blurb">${esc(o.blurb)}</p>`}
         <div class="rows">
@@ -456,7 +508,7 @@
           </div>
           <p class="fine">Talk it over. If time runs out, nothing is bought.</p>`}
       </div>`;
-    shell(r, { hour: CHECKPOINTS[idx], cash, upto: idx, right, map: mapSVG(r, st, { target: o.effect.machine }) });
+    shell(r, { hour: CHECKPOINTS[idx], cash, upto: idx, right, deciding: true, map: mapSVG(r, st, { target: o.effect.machine }) });
     wireMap(r, st);
     main.querySelectorAll('[data-pred]').forEach((b) => b.onclick = () => { dec.prediction = b.dataset.pred; dec.stage = 'choose'; persist(); render(); });
     main.querySelectorAll('[data-choice]').forEach((b) => b.onclick = () => choose(b.dataset.choice, false));
@@ -464,17 +516,18 @@
   }
 
   function tickTimer() {
-    if (!dec) return;
+    if (!dec || inactive) return;
     const el = $('#timer');
     const left = DECISION_SECONDS * 1000 - (Date.now() - dec.startedAt);
     if (el) { el.style.width = Math.max(0, left / (DECISION_SECONDS * 10)) + '%'; el.classList.toggle('low', left < 10000); }
-    const t = $('#secs'); if (t) t.textContent = Math.max(0, Math.ceil(left / 1000));
+    const t = $('#secs'); if (t) { t.textContent = Math.max(0, Math.ceil(left / 1000)); t.parentNode.classList.toggle('low', left < 10000); }
     if (left <= 0) choose('B', true);
   }
   setInterval(tickTimer, 250);
 
   function choose(choice, timedOut) {
-    if (!dec || dec.round !== playRound()) return;
+    if (!dec || inactive || dec.round !== playRound()) return;
+    notice = '';
     const { round: r, idx } = dec;
     const msg = { type: 'decide', round: r, idx, choice, prediction: dec.prediction, timedOut, ms: Date.now() - dec.startedAt };
     dec = null;
@@ -520,7 +573,7 @@
         <div class="simclock" id="simHour">${String(h0).padStart(2, '0')}:00</div>
         <p class="muted">Hours ${h0}–${h1} at ${usd(step.perHour)}/hr</p>
         <div class="earnbox"><small>Earned so far</small><b id="simEarned">+$0</b></div>
-        <p class="what">${step.invested ? `You bought <b>${esc(o.title)}</b> (−${usd(o.cost)}).` : (r === 1 && o.sunk ? `You scrapped <b>${esc(o.title)}</b>.` : `You passed on <b>${esc(o.title)}</b>.`)}</p>
+        <p class="what">${step.invested ? `You bought <b>${esc(o.title)}</b> <span style="white-space:nowrap">(−${usd(o.cost)})</span>.` : (r === 1 && o.sunk ? `You scrapped <b>${esc(o.title)}</b>.` : `You passed on <b>${esc(o.title)}</b>.`)}</p>
       </div>`;
     shell(r, { hour: h0, cash: sim.from, upto: idx + 1, right, map: mapSVG(r, st, { bumped: step.invested ? o.effect.machine : null }) });
     wireMap(r, st);
@@ -537,6 +590,7 @@
         <div class="kicker">Shift complete</div>
         <div class="final">${usd(s.cash)}</div>
         <p class="muted">${units} ${ROUNDS[r].product}s made and sold</p>
+        ${notice ? `<p class="guess wrong">${esc(notice)}</p>` : ''}
         <p>${OFFLINE ? 'Drag the timeline on the left to replay your shift.' : 'Waiting for the other teams. Eyes on the big screen.'}</p>
         ${offlineNext}
       </div>`;
@@ -573,7 +627,15 @@
   }
 
   function renderFinal() {
-    const rounds = [0, 1].map((r) => ({ r, m: LM.mirror(r, choicesFor(r)), cash: LM.simulate(r, choicesFor(r)).cash, best: LM.bestChoices(r).cash }));
+    const rounds = [0, 1].map((r) => {
+      const rec = srv.you.rounds[r];
+      const m = LM.mirror(r, choicesFor(r)).map((d) => {
+        if (rec.forced && rec.forced[d.idx]) return { ...d, ok: null, bias: null, delta: 0, text: 'The round ended before your team decided, so nothing was bought. Not counted.' };
+        if (rec.timedOut && rec.timedOut[d.idx]) return { ...d, bias: d.ok ? null : 'Default effect: time ran out', text: 'Time ran out, so the default kicked in and nothing was bought. ' + d.text.replace(/^You (walked away from|passed|skipped)/, 'That meant passing on') };
+        return d;
+      });
+      return { r, m, cash: LM.simulate(r, choicesFor(r)).cash, best: LM.bestChoices(r).cash };
+    });
     const played = (x) => choicesFor(x.r).length > 0;
     const total = srv.you.total != null ? srv.you.total : rounds.reduce((s, x) => s + (played(x) ? x.cash : 0), 0);
     const allPlayed = rounds.every((x) => choicesFor(x.r).length === 3);
@@ -589,7 +651,7 @@
         <h3><span>${ROUNDS[x.r].title}</span><span>${played(x) ? usd(x.cash) : '–'} <small class="muted" style="font-size:13px">/ best ${usd(x.best)}</small></span></h3>
         ${played(x) ? '' : '<p class="muted">Your team did not play this round.</p>'}
         ${x.m.map((d) => `
-          <div class="mi"><div class="mark ${d.ok ? 'ok' : 'no'}">${d.ok ? '✓' : '✗'}</div>
+          <div class="mi"><div class="mark ${d.ok == null ? 'na' : d.ok ? 'ok' : 'no'}">${d.ok == null ? '–' : d.ok ? '✓' : '✗'}</div>
             <div><div class="t">${esc(d.title)} · ${d.choice === 'A' ? 'Invested' : 'Passed'}</div>
             <p>${esc(d.text)}</p>${d.bias ? `<span class="bias">${esc(d.bias)}</span>` : ''}</div></div>`).join('')}
       </div>`;
@@ -599,15 +661,18 @@
         <div class="rank">#${srv.rank || '–'}</div>
         <div><div class="muted" style="font-weight:600;text-transform:uppercase;letter-spacing:.1em;font-size:12px">Your Bias Mirror</div>
           <h2 style="font-size:30px">${esc(srv.you.name)}: ${usd(total)}</h2>
-          <div class="lost">${lost > 0 ? `Biased calls cost you <b style="color:var(--bad)">${usd(lost)}</b>${sunkLost ? `, ${usd(sunkLost)} of it from paying into things that could not pay back` : ''}.` : (allPlayed ? 'A perfect manager. No money lost to bias.' : '')}
+          <div class="lost">${lost > 0 ? `Biased calls cost you <b style="color:var(--bad)">${usd(lost)}</b>${sunkLost ? (sunkLost >= lost ? ', all of it from paying into things that could not pay back' : `, ${usd(sunkLost)} of it from paying into things that could not pay back`) : ''}.` : (allPlayed ? 'A perfect manager. No money lost to bias.' : '')}
           ${predMade ? ` Round 2 predictions: ${predRight}/${predMade} right.` : ''}</div></div>
         <div class="muted" style="text-align:right;font-size:14px">Sunk money is gone.<br><b style="color:var(--brown)">Look forward.</b></div>
       </div>
       <div class="mirror">${rounds.map(col).join('')}</div>
-      ${lb.length > 1 ? `<div class="card lb pop"><h3 style="margin-bottom:10px">Final leaderboard</h3><ol>${lb.map((l, i) => `<li class="${l.name === srv.you.name ? 'me' : ''}"><span>${i + 1}. ${esc(l.name)}</span><span>${usd(l.total)}</span></li>`).join('')}</ol></div>` : ''}`;
+      ${lb.length > 1 ? `<div class="card lb pop"><h3 style="margin-bottom:10px">Final leaderboard</h3><ol>${lb.map((l, i) => `<li class="${l.name === srv.you.name ? 'me' : ''}"><span>${l.rank || i + 1}. ${esc(l.name)}</span><span>${usd(l.total)}</span></li>`).join('')}</ol></div>` : ''}`;
   }
 
   // ---------- boot ----------
-  if (!OFFLINE) { restore(); connect(); }
+  claimTab();
+  restore();
+  if (!OFFLINE) connect();
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('/sw.js').catch(() => {});
   render();
 })();

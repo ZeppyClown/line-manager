@@ -78,7 +78,8 @@ function stats() {
 function publicState() {
   const teams = game.teams.map(teamView);
   const leaderboard = teams.map(t => ({ id: t.id, num: t.num, name: t.name, total: t.total, condition: t.condition }))
-    .sort((a, b) => b.total - a.total);
+    .sort((a, b) => b.total - a.total || a.num - b.num);
+  for (const l of leaderboard) l.rank = 1 + leaderboard.filter(o => o.total > l.total).length; // ties share a rank
   return { phase: game.phase, teams, leaderboard, stats: stats() };
 }
 
@@ -100,8 +101,8 @@ function broadcast() {
       send(ws, {
         type: 'state', phase: st.phase, you,
         teamCount: st.teams.length,
-        rank: showBoard ? st.leaderboard.findIndex(l => l.id === you.id) + 1 : null,
-        leaderboard: showBoard ? st.leaderboard.map(l => ({ num: l.num, name: l.name, total: l.total })) : null,
+        rank: showBoard ? st.leaderboard.find(l => l.id === you.id).rank : null,
+        leaderboard: showBoard ? st.leaderboard.map(l => ({ num: l.num, name: l.name, total: l.total, rank: l.rank })) : null,
       });
     }
   }
@@ -185,7 +186,7 @@ function handleHost(ws, msg) {
 
 // ---------- http ----------
 const PUB = path.join(__dirname, 'public');
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
 
 function csv() {
   const rows = [['team_num', 'team', 'condition_r1', 'round', 'decision', 'offer', 'choice', 'payable', 'prediction', 'timed_out', 'decide_ms', 'forced_by_host', 'cash_after_round']];
@@ -203,6 +204,10 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const p = url.pathname;
   if (p === '/healthz') { res.writeHead(200); return res.end('ok'); }
+  if (p === '/info') {
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ publicUrl: process.env.PUBLIC_URL || null, lanUrl: lanUrl() }));
+  }
   if (p === '/qr.svg') {
     const target = (url.searchParams.get('u') || '').slice(0, 300);
     if (!target) { res.writeHead(400); return res.end('missing u'); }
@@ -252,7 +257,16 @@ setInterval(() => {
   for (const ws of sockets) { if (!ws.isAlive) { ws.terminate(); continue; } ws.isAlive = false; ws.ping(); }
 }, 20000);
 
-server.listen(PORT, () => console.log(`Line Manager on :${PORT}  (host: /host?key=${HOST_KEY})`));
+function lanUrl() {
+  for (const list of Object.values(require('os').networkInterfaces())) {
+    for (const a of list || []) if (a.family === 'IPv4' && !a.internal) return `http://${a.address}:${PORT}`;
+  }
+  return null;
+}
+server.listen(PORT, () => {
+  console.log(`Line Manager on :${PORT}  (host: /host?key=${HOST_KEY})`);
+  const lan = lanUrl(); if (lan) console.log(`Teams on the same Wi-Fi can join at ${lan}`);
+});
 
 process.on('uncaughtException', (e) => console.error('uncaught', e));
 process.on('unhandledRejection', (e) => console.error('unhandled', e));

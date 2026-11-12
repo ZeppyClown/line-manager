@@ -180,7 +180,7 @@
       const left = `${s.ev.hoursLeft}h of shift left`;
       if (ok && s.invested) text = `You bought it for $${o.cost}. It ${pb} with ${left}: ${money(s.ev.net)}.`;
       else if (ok) text = o.sunk
-        ? `You walked away from the $${o.sunk} already spent. Right call: finishing ${pb}, with only ${left}.`
+        ? `You walked away from the $${o.sunk} already spent. Right call: going ahead ${pb}, with only ${left}.`
         : `You passed. Right call: it ${pb}, with ${left}.`;
       else if (s.invested) text = o.sunk
         ? `You paid $${o.cost} more because $${o.sunk} was already in it. It ${pb}, with ${left}. Cost you $${Math.abs(s.ev.net)}.`
