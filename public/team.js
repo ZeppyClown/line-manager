@@ -752,7 +752,7 @@
     const rec = (r) => srv.you.rounds[r] || {};
     const ch = (r) => choicesFor(r);
     const real = (r, i) => !(rec(r).timedOut && rec(r).timedOut[i]) && !(rec(r).forced && rec(r).forced[i]);
-    if (ch(1)[0] === 'B' && ch(1)[1] === 'B' && real(1, 0) && real(1, 1)) out.push({ icon: '🧊', name: 'Cold Blooded', why: 'Scrapped every sunk-cost offer in Round 2' });
+    if (ch(1)[0] === 'B' && ch(1)[1] === 'B' && ch(1)[2] === 'A' && real(1, 0) && real(1, 1) && real(1, 2)) out.push({ icon: '🧊', name: 'Cold Blooded', why: 'Ignored past spend on every Round 2 offer: scrapped the two that could not pay back, finished the one that could' });
     if (ch(0)[2] === 'A' && ch(1)[2] === 'A') out.push({ icon: '🎯', name: 'Bottleneck Hunter', why: 'Bought the upgrade that fixed the slowest machine in both rounds' });
     const preds = predictionsFor(1); const s2 = LM.simulate(1, ch(1));
     if (s2.steps.length === 3 && s2.steps.every((st) => preds[st.idx] && ((preds[st.idx] === 'yes') === st.ev.payable))) out.push({ icon: '🔮', name: 'Oracle', why: 'Every Round 2 prediction was right' });

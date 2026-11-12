@@ -26,13 +26,13 @@
       offers: [
         {
           title: 'Finish the Welder retrofit',
-          blurb: 'Last month the factory started a Welder retrofit and it is half done.',
+          blurb: 'Last month you chose to start a Welder retrofit and paid $300. It is half done.',
           sunk: 300, cost: 360, effect: { machine: 'welder', rate: 1 },
           bias: 'Sunk cost',
         },
         {
           title: 'Painter overhaul',
-          blurb: 'The Painter is the plant’s pride and joy. An overhaul makes it much faster.',
+          blurb: 'You already put $400 into the Painter, the plant’s pride and joy. An overhaul makes it much faster.',
           sunk: 400, cost: 200, effect: { machine: 'painter', rate: 4 },
           bias: 'Escalation of commitment + bottleneck neglect',
         },
@@ -64,21 +64,21 @@
       offers: [
         {
           title: 'Finish the Mixer 1 energy retrofit',
-          blurb: 'A retrofit to cut Mixer 1’s power bill is half installed.',
+          blurb: 'You chose a retrofit to cut Mixer 1’s power bill and paid $500. It is half installed.',
           sunk: 500, cost: 360, effect: { saving: 12 },
           bias: 'Sunk cost',
         },
         {
           title: 'Press 2 turbo kit',
-          blurb: 'The turbo kit makes Press 2 the fastest machine on the floor.',
+          blurb: 'You already put $350 into Press 2. The turbo kit makes it the fastest machine on the floor.',
           sunk: 350, cost: 180, effect: { machine: 'press', rate: 4 },
           bias: 'Escalation of commitment + bottleneck neglect',
         },
         {
-          title: 'Freezer 3 fast-chill',
-          blurb: 'A fast-chill coil for Freezer 3.',
-          sunk: 0, cost: 96, effect: { machine: 'freezer', rate: 2 },
-          bias: 'Over-correction (refusing a good deal)',
+          title: 'Finish the Freezer 3 fast-chill install',
+          blurb: 'You chose a fast-chill coil for Freezer 3 and paid $400. It is half installed.',
+          sunk: 400, cost: 96, effect: { machine: 'freezer', rate: 2 },
+          bias: 'Over-correction (scrapping a sunk-cost project that still pays back)',
         },
       ],
     },
