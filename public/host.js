@@ -216,7 +216,7 @@
   }
 
   function renderLive(r, fresh) {
-    const teams = [...st.teams].sort((a, b) => b.rounds[r].cash - a.rounds[r].cash || a.num - b.num);
+    const teams = [...st.teams].sort((a, b) => a.num - b.num); // never sort by cash during play: it would hint at who invested
     const n = st.teams.length;
     const done = st.teams.filter((t) => t.rounds[r].done).length;
     const decided = st.teams.reduce((s, t) => s + t.rounds[r].choices.length, 0);
@@ -228,14 +228,14 @@
     main.innerHTML = `
       <div class="live">
         <div class="card board">
-          <table><thead><tr><th>#</th><th>Team</th>${r === 0 ? '<th>Group</th>' : '<th>Rule card</th>'}<th>Decisions</th><th style="text-align:right">Cash</th></tr></thead>
+          <table><thead><tr><th>#</th><th>Team</th>${r === 0 ? '<th>Group</th>' : '<th>Rule card</th>'}<th>Decisions</th><th style="text-align:right">Status</th></tr></thead>
           <tbody>${teams.map((t) => `<tr class="${flashIds.has(t.id) ? 'flash' : ''}">
             <td><span class="dot ${t.online ? '' : 'off'}" style="display:inline-block"></span> ${t.num}</td>
             <td class="tname">${esc(t.name)}</td>
             ${r === 0 ? `<td><span class="pill ${t.condition}">${t.condition === 'tag' ? 'Tag' : 'Control'}</span></td>`
               : `<td>${t.rule ? '<span class="rset ok">Set ✓</span>' : '<span class="rset">Choosing…</span>'}</td>`}
             <td><div class="pips">${pipsFor(t, r)}${t.rounds[r].done ? '<span class="donetag">done</span>' : ''}</div></td>
-            <td class="cash">${t.rounds[r].choices.length ? usd(t.rounds[r].cash) : '–'}</td></tr>`).join('')}</tbody></table>
+            <td class="cash" style="font-size:16px">${t.rounds[r].done ? 'Done ✓' : t.rounds[r].choices.length ? 'Playing' : '–'}</td></tr>`).join('')}</tbody></table>
           <p class="muted boardnote">${done} of ${n} teams finished · which choices were right stays hidden until the reveal</p>
         </div>
         <div class="card chart livecard">

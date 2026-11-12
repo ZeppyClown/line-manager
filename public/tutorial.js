@@ -103,6 +103,7 @@
       <div class="tut-fxlayer" aria-hidden="true"></div>
       <div class="tut-coach" role="dialog" aria-live="polite" aria-label="Tutorial"></div>
       <div class="tut-modal"></div>`;
+    const explicitHeight = mountEl.clientHeight > 300;   // measured before we add content
     mountEl.appendChild(root);
 
     const $ = (s) => root.querySelector(s);
@@ -130,7 +131,6 @@
     const hideInspector = () => inspector && inspector.classList.add('hidden');
 
     // ---------- sizing (no page scroll) ----------
-    const explicitHeight = mountEl.clientHeight > 300;
     function fit() {
       if (destroyed) return;
       if (explicitHeight) { root.style.height = '100%'; return; }
