@@ -24,16 +24,19 @@ HOST_KEY=s102 npm start          # http://localhost:3000  (teams)
 > Once the host page is open it keeps the server awake.
 > Results only live in memory. Export the CSV at the end of the game.
 
-## Run sheet (on the day)
-| When | Who | What |
+## Run sheet (on the day): about 6 minutes of game
+| When | What you click on the host | What teams see |
 |---|---|---|
-| 5 min before | Presenter | Open `/host?key=…` on the projector laptop. Check it shows the QR code. |
-| Slide "How to play" | Presenter | Teams scan the QR or type the URL, one laptop per team, and enter a team name. Odd-numbered teams are Control (no tag), even-numbered teams get the Tag. Click a badge to switch a team. |
-| | Presenter | Click **Start Round 1 ▶**. Each team makes 3 decisions, 40 s each. About 2½ minutes. |
-| | Presenter | When the table shows every team finished, or time is up, click **Reveal Round 1 results**. Unfinished decisions count as "don't invest". |
-| | Presenter | Talk about H1, then click **Start Round 2 ▶**. Every team gets all five nudges. |
-| | Presenter | **Reveal Round 2 results**, then **Final leaderboard 🏆**. Teams read their Bias Mirror on their laptops. |
-| After | Presenter | Click **Export CSV** to keep the data. Do not press Reset before exporting. |
+| 5 min before | Open `/host?key=…` on the projector laptop. | — |
+| 0:20 | Show the lobby (QR and URL). | Teams join on one laptop each, then a **1-minute tutorial** runs on their laptops. The lobby counts "N of 7 teams ready". |
+| ~1:20 | **Start Round 1 ▶** (3-2-1 countdown) | Odd teams play without the payback tag (Control), even teams with it (Tag). 3 offers, 40 s each. |
+| ~3:20 | **Reveal Round 1 results** | "Eyes on the big screen". Talk about H1. |
+| ~4:15 | **Start Round 2 ▶** | A 20-second **rule card**, then 3 offers with all 8 nudges. |
+| ~6:45 | **Reveal Round 2 results** → **Final leaderboard 🏆** | Bias Mirror, ghost manager comparison and badges on each laptop. |
+| After | **Export CSV** | — |
+
+The header chip shows time on the current screen and total game time. It turns orange when a screen runs long.
+Use **Finish for slow teams** if one team stalls. Sound is muted on the host by default; teams can mute with the 🔊 button.
 
 **If the Wi-Fi fails:** teams open `…/?offline` (Control) or `…/?offline&cond=tag` (Tag).
 The game runs on the laptop alone and shows the Bias Mirror at the end, but nothing appears on the

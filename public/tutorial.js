@@ -136,6 +136,7 @@
       if (explicitHeight) { root.style.height = '100%'; return; }
       const top = root.getBoundingClientRect().top + window.scrollY;
       let h = Math.max(400, Math.floor(window.innerHeight - top - 12));
+      h = Math.max(400, Math.min(h, Math.round(root.clientWidth * 0.64)));   // don't stretch into a tall, empty map
       root.style.height = h + 'px';
       const over = document.documentElement.scrollHeight - window.innerHeight;
       if (over > 0 && h - over >= 400) root.style.height = (h - over) + 'px';
@@ -187,7 +188,7 @@
         right.innerHTML = `
           <div class="tut-panel tut-offer tut-pop">
             <div class="tut-timer" data-timer></div>
-            <div class="tut-kicker"><span>Practice offer · doesn't count</span><span class="tut-secs" data-secswrap><span data-secs>${DEC_SECS}</span>s</span></div>
+            <div class="tut-kicker"><span>Practice · doesn't count</span><span class="tut-secs" data-secswrap><span data-secs>${DEC_SECS}</span>s</span></div>
             <h3>Paint the factory sign orange?</h3>
             <p class="tut-blurb">A fresh coat of paint for the Toy Works sign.</p>
             <div class="tut-rows">
@@ -377,7 +378,7 @@
         canNext: () => tapped,
         coach: () => tapped
           ? { title: 'Nice one! 🎉', body: '<p>That’s how you check any machine during the game.</p>' }
-          : { title: 'Your turn', body: '<p><b>Tap any machine</b> to inspect it.</p>', next: 'Tap a machine' },
+          : { title: 'Your turn 👆', body: '<p><b>Tap any machine</b> on the map to inspect it.</p>', next: 'Tap first' },
       },
       { // 4. Clock and cash
         holes: ['.tut-shift', '.tut-log'],
@@ -388,8 +389,8 @@
         }),
       },
       { // 5. Practice decision
-        holes: ['.tut-right', '.tut-sign'],
-        place: { to: '[data-actions]', side: 'left', v: 'middle' },
+        holes: ['.tut-offer', '[data-actions]', '.tut-sign'],
+        place: { to: '[data-actions]', side: 'left', v: 'middle', avoid: '.tut-sign' },
         enter: () => { choice = null; setSign(false); setRight('offer'); startTimer(); },
         leave: () => stopTimer(),
         canNext: () => !!choice,
@@ -397,10 +398,10 @@
           ? { title: choice === 'timeout' ? 'That’s the timer' : 'Nice teamwork! 🙌', body: choice === 'timeout'
               ? '<p>When time runs out, nothing is bought. Real offers work the same way.</p>'
               : '<p>Every offer works like this. The real ones count.</p>' }
-          : { title: 'Practice offer', body: '<p>Talk as a team, then pick one before the 40-second timer ends <span class="tut-soft">(sped up here)</span>. If time runs out, nothing is bought.</p><p><span class="tut-tagline">This one doesn’t count</span></p>', next: 'Pick one' },
+          : { title: 'Practice offer', body: '<p>Talk as a team and pick one. You get <b>40 seconds</b> <span class="tut-soft">(sped up here)</span>.</p><p>If time runs out, nothing is bought.</p><p><span class="tut-tagline">This one doesn’t count</span></p>', next: 'Pick one' },
       },
       { // 6. Watch your cash grow
-        holes: ['.tut-shift', '.tut-mapwrap', '.tut-right'],
+        holes: ['.tut-shift', '.tut-mapwrap', '.tut-running'],
         place: { to: '.tut-mapwrap', side: 'inside-bottom' },
         enter: () => { setRight('run'); startRun(); },
         leave: () => stopRun(),
@@ -443,6 +444,7 @@
       const s = STEPS[step];
       if (s.modal) {
         coach.classList.remove('show');
+        coach.innerHTML = '';
         const m = s.modal();
         const back = step > 0 && !(step === LAST && doneCalled) ? '<button class="tut-link" data-back>← Back</button>' : '<span></span>';
         const skip = step < LAST ? '<button class="tut-link" data-skip>Skip tutorial</button>' : '<span></span>';
@@ -457,6 +459,7 @@
             <div class="tut-modal-foot">${back}${dotsHTML()}${skip}</div>
           </div>`;
         modal.classList.add('show');
+        setHoles();
         focusPrimary(modal);
         return;
       }
@@ -474,6 +477,7 @@
           <button class="btn-primary tut-btn" data-next ${ok ? '' : 'disabled'}>${ok ? 'Next <span aria-hidden="true">→</span>' : esc(c.next || 'Next')}</button>
         </div></div>`;
       coach.classList.add('show');
+      setHoles();
       placeCoach();
       if (ok) focusPrimary(coach);
     }
@@ -528,6 +532,13 @@
       if (s.place.side === 'inside-bottom') y = t.y + t.h - bh - 14;
       else if (s.place.v === 'middle') y = t.y + (t.h - bh) / 2;
       else y = t.y + Math.min(40, t.h * 0.08);
+      if (s.place.avoid) {               // don't cover something the team should be watching
+        const av = root.querySelector(s.place.avoid);
+        if (av) {
+          const a = relRect(av, 10);
+          if (x < a.x + a.w && x + bw > a.x && y < a.y + a.h && y + bh > a.y) y = a.y + a.h;
+        }
+      }
       // keep inside the tutorial area
       const fx0 = x;
       x = Math.max(8, Math.min(x, W - bw - 8));
@@ -568,7 +579,6 @@
       setLog();
       if (wasModal && !s.modal) coach.classList.add('tut-noanim');
       renderCoach();
-      setHoles();
       placeCoach(wasModal);
       coach.classList.remove('tut-noanim');
     }

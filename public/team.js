@@ -239,7 +239,7 @@
       }
     } else if (srv.phase === 'final') { key = 'final-' + JSON.stringify([choicesFor(0), choicesFor(1), srv.rank, srv.leaderboard]); fn = renderFinal; }
     else { key = 'reveal-' + srv.phase + '-' + choicesFor(0).join('') + choicesFor(1).join(''); fn = renderReveal; }
-    document.body.classList.toggle('playing', /^(dec|sim|done)-|^rule$/.test(key));
+    document.body.classList.toggle('playing', /^(dec|sim|done)-|^(rule|tutorial)$/.test(key));
     if (key !== screenKey || force) { screenKey = key; fn(); }
     else if (key === 'lobby') fn();
     else if (key === 'rule') updateRuleBadge();
