@@ -190,17 +190,19 @@
             <div class="rtrack"><div style="width:${n ? ready / n * 100 : 0}%"></div></div>
             <div class="rnote">${!n ? 'Scan the code to join' : allReady ? 'Everyone is ready. Start when you are!' : 'Teams are playing the practice tutorial'}</div>
           </div>
-          <div class="teams">${n ? st.teams.map((t) => {
+          <div class="teams ${n > 8 ? 'many' : ''}">${n ? st.teams.map((t) => {
             const isNew = !seenTeams.has(t.id), justReady = t.ready && prevReady[t.id] === false;
             return `
             <div class="card chip ${isNew ? 'pop' : ''} ${t.ready ? 'is-ready' : ''}">
               <div class="num">${t.num}</div>
               <div class="mid">
                 <div class="nm">${esc(t.name)}</div>
-                <span class="status ${t.ready ? 'ok' : ''} ${justReady ? 'flip' : ''}">${t.ready ? 'Ready ✓' : '<i></i>Learning…'}</span>
+                <div class="tags">
+                  <span class="status ${t.ready ? 'ok' : ''} ${justReady ? 'flip' : ''}">${t.ready ? 'Ready ✓' : '<i></i>Learning…'}</span>
+                  <span class="pill ${t.condition}" data-toggle="${t.id}" title="Click to switch Round 1 condition">${t.condition === 'tag' ? 'Tag' : 'Control'}</span>
+                </div>
               </div>
               <span class="dot ${t.online ? '' : 'off'}" title="${t.online ? 'Online' : 'Offline'}"></span>
-              <span class="pill ${t.condition}" data-toggle="${t.id}" title="Click to switch Round 1 condition">${t.condition === 'tag' ? 'Tag' : 'Control'}</span>
               <button class="x" data-remove="${t.id}" title="Remove team">×</button>
             </div>`;
           }).join('') : '<div class="empty">Waiting for teams to join…</div>'}</div>
@@ -290,7 +292,7 @@
             ${bars([{ label: 'Control', v: cg, color: '#a8673c' }, { label: 'Payback tag', v: tg, color: 'var(--orange)' }], { anim: fresh })}</div>
         </div>
         <div class="card verdict ${fresh ? 'pop late' : ''}"><span class="big">${verdict[0]}</span>
-          <span><span>${esc(verdict[1])}${s.all.forced ? ` <small class="muted">(${s.all.forced} unanswered decision${s.all.forced === 1 ? '' : 's'} filled in by the host and left out of these numbers)</small>` : ''}</span>
+          <span class="vtext"><span>${esc(verdict[1])}${s.all.forced ? ` <small class="muted">(${s.all.forced} unanswered decision${s.all.forced === 1 ? '' : 's'} filled in by the host and left out of these numbers)</small>` : ''}</span>
           <span class="means">What this means: ${esc(means + sample)}</span></span></div>
       </div>`;
     if (fresh) growIn(main);
@@ -337,7 +339,7 @@
             ${totalRules ? `<div class="hbars">${rows.map((x, i) => {
               const w = x.n / maxN * 100;
               return `<div class="hrow ${x.id === 'payback' ? 'pb' : ''}">
-                <div class="hl">${esc(x.label)}<small>${x.badSeen ? `bought ${x.bad} of ${x.badSeen} unpayable` : x.n ? 'no answered unpayable offers' : '&nbsp;'}</small></div>
+                <div class="hl">${esc(x.label)}<small>${x.badSeen ? `bought ${x.bad} of ${x.badSeen} unpayable` : x.n ? 'no decisions to count' : '&nbsp;'}</small></div>
                 <div class="ht"><div class="hf" style="width:${fresh ? 0 : w}%;transition-delay:${fresh ? 0.2 + i * 0.12 : 0}s" ${fresh ? `data-w="${w}%"` : ''}></div></div>
                 <div class="hn">${x.n}</div></div>`;
             }).join('')}</div>` : '<div class="empty" style="font-size:16px;padding:18px">No rule cards were chosen.</div>'}
@@ -352,7 +354,10 @@
     const lb = st.leaderboard;
     const top = [lb[1], lb[0], lb[2]];
     const k = H() < 820 ? 0.55 : 1;
-    const heights = [170 * k, 230 * k, 130 * k], colors = ['#a8673c', 'var(--orange)', '#c99a74'], places = top.map((t) => t && t.rank);
+    // Size and colour by rank, so tied teams stand on equal blocks.
+    const byRank = { 1: [230, 'var(--orange)'], 2: [170, '#a8673c'], 3: [130, '#c99a74'] };
+    const places = top.map((t) => t && t.rank);
+    const heights = places.map((p) => (byRank[p] || byRank[3])[0] * k), colors = places.map((p) => (byRank[p] || byRank[3])[1]);
     const delay = [0.45, 0.9, 0]; // 3rd rises first, then 2nd, then 1st
     main.innerHTML = `
       <div class="reveal" style="text-align:center">
@@ -372,7 +377,7 @@
         const r = first ? first.getBoundingClientRect() : null;
         fx('confetti', { x: r ? r.left + r.width / 2 : innerWidth / 2, y: r ? r.top : innerHeight / 2, count: 160 });
         fx('sound', 'complete');
-      }, reduceMotion ? 100 : 1500);
+      }, reduceMotion ? 100 : 1650);
     }
   }
 
@@ -384,7 +389,7 @@
     counting = true; renderControls();
     setTimeout(finish, 9000); // safety net if the overlay never reports back
     try {
-      const p = FX.countdown(['3', '2', '1', 'Go!'], { onDone: finish });
+      const p = FX.countdown(['3', '2', '1', 'Go!'], { onDone: finish, stepMs: 850 });
       if (p && typeof p.then === 'function') p.then(finish, finish);
     } catch (e) { console.warn('countdown failed', e); finish(); }
   }

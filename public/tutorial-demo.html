@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Line Manager · Tutorial demo</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/map.css">
+<link rel="stylesheet" href="/tutorial.css">
+<style>
+  /* mimics the team page shell: ~50px header, content below */
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 14px 28px 0; }
+  body.full .wrap { max-width: none; padding: 10px 16px 0; }
+  header.top { display: flex; align-items: center; gap: 14px; height: 36px; margin-bottom: 8px; }
+  header.top .brand { font-size: 22px; }
+  header.top .spacer { flex: 1; }
+  #status { font-size: 13px; font-weight: 600; color: var(--muted); }
+  #status.done { color: var(--good); }
+  #fxlog { font-size: 12px; color: var(--muted); min-width: 120px; text-align: right; }
+  .demo-confetti { position: fixed; top: -12px; width: 9px; height: 14px; border-radius: 2px; z-index: 9999; pointer-events: none; animation: demo-fall 1.8s ease-in forwards; }
+  @keyframes demo-fall { to { transform: translateY(105vh) rotate(540deg); opacity: .7; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">Line Manager</div>
+    <span class="pill" id="teamPill"></span>
+    <div class="spacer"></div>
+    <span id="fxlog"></span>
+    <span id="status">Tutorial running…</span>
+  </header>
+  <main id="main"><div id="mount"></div></main>
+</div>
+<script src="/engine.js"></script>
+<script src="/map.js"></script>
+<script src="/tutorial.js"></script>
+<script>
+  // Query params: ?team=Name  ?nofx=1 (fx undefined)  ?full=1 (full-width layout like body.playing)
+  const q = new URLSearchParams(location.search);
+  const teamName = q.get('team') || 'The Toy Tycoons';
+  if (q.get('full')) document.body.classList.add('full');
+  document.getElementById('teamPill').textContent = 'Team 3 · ' + teamName;
+
+  // Tiny stand-in for the real fx module: beeps + confetti, and logs the sound name.
+  let ac = null;
+  const tones = { click: [[660, .05]], coin: [[988, .06], [1319, .12]], roundStart: [[523, .1], [659, .1], [784, .18]], complete: [[523, .1], [659, .1], [784, .1], [1047, .3]] };
+  const fx = q.get('nofx') ? undefined : {
+    sound(name) {
+      document.getElementById('fxlog').textContent = '♪ ' + name;
+      window.__sounds = (window.__sounds || []).concat(name);
+      try {
+        ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+        let t = ac.currentTime;
+        (tones[name] || tones.click).forEach(([f, d]) => {
+          const o = ac.createOscillator(), g = ac.createGain();
+          o.type = 'triangle'; o.frequency.value = f; g.gain.setValueAtTime(.12, t); g.gain.exponentialRampToValueAtTime(.001, t + d);
+          o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d); t += d * .8;
+        });
+      } catch (_) {}
+    },
+    confetti() {
+      const cols = ['#f39a1e', '#ffb547', '#4a1f0c', '#2f8a4c', '#fbe4c9'];
+      for (let i = 0; i < 70; i++) {
+        const p = document.createElement('div');
+        p.className = 'demo-confetti';
+        p.style.left = Math.random() * 100 + 'vw';
+        p.style.background = cols[i % cols.length];
+        p.style.animationDelay = Math.random() * .5 + 's';
+        p.style.animationDuration = 1.4 + Math.random() + 's';
+        document.body.appendChild(p);
+        setTimeout(() => p.remove(), 3200);
+      }
+    },
+  };
+
+  window.__doneCount = 0;
+  window.tutorial = LMTutorial.start(document.getElementById('mount'), {
+    teamName,
+    fx,
+    onDone() {
+      window.__doneCount++;
+      const s = document.getElementById('status');
+      s.textContent = 'done ✓ (onDone called ' + window.__doneCount + '×)';
+      s.classList.add('done');
+    },
+  });
+</script>
+</body>
+</html>

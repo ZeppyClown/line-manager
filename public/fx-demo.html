@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Line Manager — FX demo</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/style.css">
+<script src="/fx.js"></script>
+<style>
+  main { max-width: 980px; margin: 0 auto; padding: 28px 22px 60px; }
+  header { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+  header h1 { font-size: 34px; flex: 1; }
+  section.card { padding: 18px 20px; margin-bottom: 16px; }
+  section h2 { font-size: 18px; margin-bottom: 12px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .row button { padding: 10px 16px; font-size: 15px; }
+  .cash { font-size: 40px; font-weight: 800; }
+  .stat { font: 500 14px/1.4 Poppins, sans-serif; color: var(--muted); }
+  code { background: var(--peach); padding: 1px 6px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1 class="brand">FX demo</h1>
+    <span id="muteSlot"></span>
+  </header>
+  <p class="stat">Audio: <b id="audioState">?</b> · muted: <b id="mutedState">?</b> · reducedMotion: <b id="rm">?</b> ·
+    live <code>.fx-</code> nodes: <b id="nodeCount">0</b></p>
+
+  <section class="card">
+    <h2>Sounds</h2>
+    <div class="row" id="sounds"></div>
+  </section>
+
+  <section class="card">
+    <h2>Overlays</h2>
+    <div class="row">
+      <button class="btn-orange" id="cd">Countdown 3-2-1-Go!</button>
+      <button class="btn-ghost" id="cdRound">Countdown + roundStart</button>
+      <button class="btn-orange" id="conf">Confetti (top centre)</button>
+      <button class="btn-ghost" id="confHere">Confetti from this button</button>
+      <button class="btn-ghost" id="confBig">Confetti ×3 bursts</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Cash</h2>
+    <div class="row">
+      <span class="cash">$<span id="cash">500</span></span>
+      <button class="btn-primary" id="earn">Earn +$10</button>
+      <button class="btn-scrap" id="spend">Buy −$60</button>
+      <button class="btn-ghost" id="stream">Stream pops (3 s, 12/s)</button>
+      <button class="btn-ghost" id="flood">Flood 80 pops at once</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Toasts</h2>
+    <div class="row">
+      <button class="btn-ghost" id="tBadge">Badge unlocked</button>
+      <button class="btn-ghost" id="tGood">Good</button>
+      <button class="btn-ghost" id="tBad">Bad</button>
+      <button class="btn-ghost" id="tInfo">Info</button>
+      <button class="btn-ghost" id="tMany">6 in a row</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Robustness</h2>
+    <div class="row">
+      <button class="btn-ghost" id="junk">Call everything with junk args</button>
+      <button class="btn-ghost" id="reset">Clear saved mute pref</button>
+    </div>
+  </section>
+</main>
+
+<script>
+  FX.init({ defaultMuted: false });
+  // Calls made before the DOM/body or audio is ready must be harmless:
+  FX.sound('coin');
+
+  var $ = function (id) { return document.getElementById(id); };
+  $('muteSlot').appendChild(FX.muteButton());
+
+  ['click', 'coin', 'buy', 'scrap', 'tick', 'roundStart', 'countdown', 'go', 'complete', 'badge', 'error'].forEach(function (n) {
+    var b = document.createElement('button');
+    b.className = 'btn-ghost'; b.textContent = n;
+    b.onclick = function () { FX.sound(n); };
+    $('sounds').appendChild(b);
+  });
+
+  function centre(el) { var r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
+
+  $('cd').onclick = function () { FX.countdown().then(function (r) { FX.toast(r.skipped ? 'Countdown skipped' : 'Countdown done', { tone: 'info' }); }); };
+  $('cdRound').onclick = function () { FX.countdown(['3', '2', '1', 'Go!'], { onDone: function () { FX.sound('roundStart'); } }); };
+  $('conf').onclick = function () { FX.confetti(); FX.sound('complete'); };
+  $('confHere').onclick = function (e) { var c = centre(e.currentTarget); FX.confetti({ x: c.x, y: c.y, count: 80 }); FX.sound('badge'); };
+  $('confBig').onclick = function () {
+    var w = innerWidth;
+    FX.confetti({ x: w * 0.2, y: innerHeight * 0.4 });
+    setTimeout(function () { FX.confetti({ x: w * 0.8, y: innerHeight * 0.4 }); }, 250);
+    setTimeout(function () { FX.confetti(); }, 500);
+  };
+
+  var cash = 500;
+  function setCash(delta, src) {
+    cash += delta; $('cash').textContent = cash.toLocaleString();
+    FX.pulse($('cash').parentNode);
+    var c = centre(src);
+    FX.coinPop(c.x + (Math.random() - 0.5) * 40, c.y - 20, (delta > 0 ? '+$' : '−$') + Math.abs(delta));
+  }
+  $('earn').onclick = function (e) { setCash(10, e.currentTarget); FX.sound('coin'); };
+  $('spend').onclick = function (e) { setCash(-60, e.currentTarget); FX.sound('buy'); };
+  $('stream').onclick = function (e) {
+    var src = e.currentTarget, n = 0;
+    var iv = setInterval(function () {
+      setCash(10, src); FX.sound('coin');
+      if (++n >= 36) clearInterval(iv);
+    }, 1000 / 12);
+  };
+  $('flood').onclick = function () {
+    for (var i = 0; i < 80; i++) FX.coinPop(Math.random() * innerWidth, 120 + Math.random() * (innerHeight - 240), '+$' + (5 + (i % 4) * 5));
+  };
+
+  $('tBadge').onclick = function () { FX.toast('Badge unlocked: Cold Blooded', { tone: 'good', icon: '🧊' }); FX.sound('badge'); };
+  $('tGood').onclick = function () { FX.toast('Upgrade paid back — nice!', { tone: 'good' }); };
+  $('tBad').onclick = function () { FX.toast('Not enough cash for that upgrade', { tone: 'bad' }); FX.sound('error'); };
+  $('tInfo').onclick = function () { FX.toast('Round 2 starts in 10 seconds', { tone: 'info', icon: '⏱' }); };
+  $('tMany').onclick = function () {
+    ['Team 1 scrapped the Welder retrofit', 'Team 4 invested $60', 'Badge unlocked: Lean Machine', 'Team 2 timed out',
+     'Team 6 bought Painter overhaul', 'Hour 16 checkpoint'].forEach(function (t, i) {
+      setTimeout(function () { FX.toast(t, { tone: ['info', 'good', 'good', 'bad', 'bad', 'info'][i], icon: i === 2 ? '🏅' : undefined }); }, i * 180);
+    });
+  };
+
+  $('junk').onclick = function () {
+    FX.sound(); FX.sound('nope'); FX.sound(42);
+    FX.pulse(); FX.pulse(null); FX.pulse({}); FX.pulse(document.createElement('span'));
+    FX.coinPop(); FX.coinPop('a', null, null); FX.coinPop(NaN, NaN, { toString: function () { return '+$?'; } });
+    FX.confetti({ count: -5 }); FX.confetti({ colors: [] }); FX.confetti({ count: 0 });
+    FX.toast(); FX.toast(null, { tone: 'weird' });
+    FX.countdown([], { sound: false, stepMs: 150 });
+    FX.setMuted(FX.muted);
+    FX.toast('Junk calls survived ✓', { tone: 'good' });
+  };
+  $('reset').onclick = function () { try { localStorage.removeItem('lm-muted'); } catch (e) {} FX.toast('Saved mute preference cleared', { tone: 'info' }); };
+
+  setInterval(function () {
+    $('audioState').textContent = FX.audioState;
+    $('mutedState').textContent = FX.muted;
+    $('rm').textContent = FX.reducedMotion;
+    $('nodeCount').textContent = document.querySelectorAll('[class*="fx-"]:not(.fx-mute):not(.fx-mute *)').length;
+  }, 200);
+</script>
+</body>
+</html>

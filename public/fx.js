@@ -438,7 +438,7 @@
     var rm = reducedMotion();
     var W = cf.w, H = cf.h;
     var x0 = typeof opts.x === 'number' ? opts.x : W / 2;
-    var y0 = typeof opts.y === 'number' ? opts.y : H * 0.22;
+    var y0 = typeof opts.y === 'number' ? opts.y : H * 0.3;
     var count = Math.max(0, Math.round(opts.count == null ? 140 : opts.count));
     var life = (opts.duration || 2500) / 1000;
     var colors = opts.colors && opts.colors.length ? opts.colors : PALETTE;
@@ -463,8 +463,8 @@
         p.vr = 0; p.vt = 0; p.wf = 0; p.wa = 0; p.ph = 0; p.fadeIn = true;
       } else {
         // Upward cone burst, then gravity takes over.
-        var ang = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.95;
-        var spd = (420 + Math.random() * 720) * scale;
+        var ang = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.15;
+        var spd = (300 + Math.random() * 620) * scale;
         p.vx = Math.cos(ang) * spd;
         p.vy = Math.sin(ang) * spd;
         p.g = 820 * scale; p.drag = 1.6 + Math.random() * 1.2;

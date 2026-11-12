@@ -125,7 +125,10 @@
   .readybar .rnote { grid-column: 1 / -1; font-size: 15px; color: var(--muted); font-weight: 500; }
   .readybar.all .rnote { color: var(--good); font-weight: 600; }
   .chip .mid { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
-  .chip .nm { flex: none; }
+  .chip .nm { flex: none; max-width: 100%; overflow-wrap: break-word; }
+  .chip .tags { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .teams.many { grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 8px; }
+  .teams.many .chip { padding: 6px 26px 6px 10px; gap: 8px; }
   .chip .x { top: 2px; right: 4px; }
   .chip { padding-right: 30px; transition: box-shadow .4s; }
   .chip.is-ready { box-shadow: 0 0 0 2px rgba(47,138,76,.35), var(--shadow); }
@@ -170,7 +173,7 @@
 
   /* ---------- v2: reveals ---------- */
   .bar .col { transition: height .9s cubic-bezier(.2,.8,.2,1); }
-  .verdict > span:last-child { display: flex; flex-direction: column; gap: 6px; }
+  .verdict .vtext { display: flex; flex-direction: column; gap: 6px; }
   .verdict .means { font-size: .78em; font-weight: 500; color: var(--brown-2); }
   .pop.late { animation-delay: .6s; }
   .pop.late2 { animation-delay: 1.3s; }
@@ -178,7 +181,7 @@
   .r2grid .bars { gap: 22px; }
   .r2grid .barlabels { gap: 22px; }
   .hbars { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
-  .hrow { display: grid; grid-template-columns: minmax(0, 1.25fr) 1fr 30px; align-items: center; gap: 12px; }
+  .hrow { display: grid; grid-template-columns: minmax(0, 1.5fr) 1fr 30px; align-items: center; gap: 12px; }
   .hrow .hl { font-weight: 700; font-size: 16px; line-height: 1.2; }
   .hrow .hl small { display: block; font-weight: 500; font-size: 13px; color: var(--muted); margin-top: 2px; }
   .hrow .ht { height: 26px; background: #f4ebe0; border-radius: 8px; overflow: hidden; }
@@ -205,6 +208,15 @@
     .chip .num { width: 32px; height: 32px; }
     .chip .nm { font-size: 16px; }
     .status { font-size: 12px; padding: 1px 9px; }
+    .chip .tags .pill { font-size: 12px; padding: 1px 9px; }
+    .chip { padding-top: 6px; padding-bottom: 6px; }
+    .chip .mid { gap: 2px; }
+    .lobby .tagline { font-size: 17px; margin-bottom: 12px; }
+    .lobby h1 { font-size: 46px; }
+    .teams { gap: 10px; }
+    .teams.many .chip .num { width: 26px; height: 26px; font-size: 14px; }
+    .teams.many .chip .nm { font-size: 14px; }
+    .teams.many + .lobbynote { display: none; }
     .lobbynote { font-size: 13px; margin-top: 10px; }
     .board .tname { font-size: 17px; }
     .boardnote { font-size: 13px; margin-top: 8px; }
@@ -219,6 +231,12 @@
     .hrow .ht { height: 20px; }
     .hrow .hn { font-size: 20px; }
     .motto { font-size: 22px; margin-top: 14px; }
+  }
+  @media (min-height: 1000px) {
+    .board td, .board th { padding: 16px 10px; }
+    .board .tname { font-size: 22px; }
+    .pip { width: 26px; height: 26px; }
+    .teams { gap: 14px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .podium.rise .pod .block, .podium.rise .pod .nm, .podium.rise .pod .cash, .podium.rise .pod .block span, .board tr.flash td, .pip.newpip, .btn-orange.glow, .status i { animation: none !important; }
