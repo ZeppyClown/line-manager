@@ -11,6 +11,7 @@ const PORT = process.env.PORT || 3000;
 const HOST_KEY = process.env.HOST_KEY || 's102';
 const STATE_FILE = process.env.STATE_FILE || path.join(require('os').tmpdir(), 'line-manager-state.json');
 const MAX_TEAMS = 12;
+const RULES = ['payback', 'finish', 'frugal', 'none'];
 const PHASES = ['lobby', 'r1', 'r1-reveal', 'r2', 'r2-reveal', 'final'];
 const PLAY_PHASE = { 0: 'r1', 1: 'r2' };
 
@@ -44,7 +45,7 @@ function teamView(t) {
     return { ...r, cash: sim.cash, done: sim.done };
   });
   const total = rounds.reduce((s, r) => s + (r.choices.length ? r.cash : 0), 0);
-  return { id: t.id, num: t.num, name: t.name, condition: t.condition, online: onlineCount(t.id) > 0, rounds, total };
+  return { id: t.id, num: t.num, name: t.name, condition: t.condition, ready: !!t.ready, rule: t.rule || null, online: onlineCount(t.id) > 0, rounds, total };
 }
 
 function stats() {
@@ -70,6 +71,7 @@ function stats() {
       if (sim.done) for (const g of gs) { g.done++; g.cashSum += sim.cash; }
     }
     out[ri] = groups;
+    if (ri === 1) { const rules = {}; for (const t of game.teams) if (t.rule) rules[t.rule] = (rules[t.rule] || 0) + 1; out.rules = rules; }
   }
   return out;
   function blank() { return { forced: 0, badSeen: 0, badTaken: 0, goodSeen: 0, goodTaken: 0, predSeen: 0, predRight: 0, done: 0, cashSum: 0 }; }
@@ -134,6 +136,19 @@ function handleTeam(ws, msg) {
     send(ws, { type: 'joined', teamId: t.id });
     return broadcast();
   }
+  if (msg.type === 'ready') {
+    const t = game.teams.find(x => x.id === ws.teamId);
+    if (t && !t.ready) { t.ready = true; return broadcast(); }
+    return;
+  }
+  if (msg.type === 'rule') {
+    // Round 2 rule card (implementation intention). Set once, before the first Round 2 decision.
+    const t = game.teams.find(x => x.id === ws.teamId);
+    if (!t || game.phase !== 'r2' || t.rule || t.rounds[1].choices.length) return broadcast();
+    if (!RULES.includes(msg.rule)) return;
+    t.rule = msg.rule; saveNow();
+    return broadcast();
+  }
   if (msg.type === 'decide') {
     const t = game.teams.find(x => x.id === ws.teamId);
     if (!t) return;
@@ -189,11 +204,11 @@ const PUB = path.join(__dirname, 'public');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
 
 function csv() {
-  const rows = [['team_num', 'team', 'condition_r1', 'round', 'decision', 'offer', 'choice', 'payable', 'prediction', 'timed_out', 'decide_ms', 'forced_by_host', 'cash_after_round']];
+  const rows = [['team_num', 'team', 'condition_r1', 'round', 'decision', 'offer', 'choice', 'payable', 'prediction', 'timed_out', 'decide_ms', 'forced_by_host', 'rule_r2', 'cash_after_round']];
   for (const t of game.teams) {
     t.rounds.forEach((r, ri) => {
       const sim = LM.simulate(ri, r.choices);
-      sim.steps.forEach(s => rows.push([t.num, t.name, t.condition, ri + 1, s.idx + 1, s.ev.offer.title, s.invested ? 'invest' : 'skip', s.ev.payable, r.predictions[s.idx] ?? '', r.timedOut[s.idx] ? 1 : 0, r.ms[s.idx] ?? '', r.forced && r.forced[s.idx] ? 1 : 0, sim.done ? sim.cash : '']));
+      sim.steps.forEach(s => rows.push([t.num, t.name, t.condition, ri + 1, s.idx + 1, s.ev.offer.title, s.invested ? 'invest' : 'skip', s.ev.payable, r.predictions[s.idx] ?? '', r.timedOut[s.idx] ? 1 : 0, r.ms[s.idx] ?? '', r.forced && r.forced[s.idx] ? 1 : 0, ri === 1 ? (t.rule || '') : '', sim.done ? sim.cash : '']));
     });
   }
   const safe = v => (typeof v === 'string' && /^[=+\-@\t\r]/.test(v) ? "'" + v : v);

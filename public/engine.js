@@ -193,7 +193,33 @@
   function fmtH(h) { return Number.isInteger(h) ? `${h}h` : `${h.toFixed(1)}h`; }
   function money(n) { return (n < 0 ? '−$' : '+$') + Math.abs(Math.round(n)).toLocaleString('en-US'); }
 
-  const api = { SHIFT_HOURS, CHECKPOINTS, START_CASH, DECISION_SECONDS, ROUNDS, initialState, hourly, flows, bottleneckIds, applyEffect, evaluateOffer, simulate, bestChoices, mirror, fmtH, money };
+  // Round 2 rule card options (nudge: implementation intention). Text shown to teams.
+  const RULES = [
+    { id: 'payback', label: 'Buy only if it earns its cost back before the shift ends', short: 'Buy only if it pays back in time' },
+    { id: 'finish', label: 'Always finish what we started', short: 'Finish what we started' },
+    { id: 'frugal', label: 'Spend as little as possible', short: 'Spend as little as possible' },
+    { id: 'none', label: 'No rule. We\u2019ll decide each time', short: 'No rule' },
+  ];
+
+  // Cash after each half-hour for a set of choices (used for the ghost manager line).
+  function cashPath(roundIdx, choices, step = 0.5) {
+    const sim = simulate(roundIdx, choices);
+    const pts = [];
+    for (let h = 0; h <= SHIFT_HOURS + 1e-9; h += step) {
+      let cash = START_CASH;
+      for (const st of sim.steps) {
+        const h0 = CHECKPOINTS[st.idx], h1 = CHECKPOINTS[st.idx + 1] ?? SHIFT_HOURS;
+        if (h < h0) break;
+        const after = st.cashBefore - (st.invested ? st.ev.offer.cost : 0);
+        if (h <= h1) { cash = after + st.perHour * (h - h0); break; }
+        cash = st.cashAfter;
+      }
+      pts.push([h, cash]);
+    }
+    return pts;
+  }
+
+  const api = { RULES, cashPath, SHIFT_HOURS, CHECKPOINTS, START_CASH, DECISION_SECONDS, ROUNDS, initialState, hourly, flows, bottleneckIds, applyEffect, evaluateOffer, simulate, bestChoices, mirror, fmtH, money };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.LM = api;
 })(typeof window !== 'undefined' ? window : globalThis);

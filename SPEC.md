@@ -68,3 +68,42 @@ Plus: R1 vs R2 change, prediction accuracy, rank.
 
 ## Data export (CSV)
 team, condition_r1, round, decision, choice, prediction, timed_out, decide_ms, cash_after_round.
+
+---
+
+# v2 additions (in progress)
+
+## Flow and timing (target: 5–7 minutes of play)
+| Step | Where | Time |
+|---|---|---|
+| Teams join and play the **tutorial** on their laptops while others join. Host lobby shows "ready ✓" per team | lobby | ~60–75 s |
+| **3-2-1 countdown**, Round 1 (3 decisions × ≤40 s + ~4 s animation each) | r1 | ~2–2.5 min |
+| Round 1 results on projector | r1-reveal | ~30 s |
+| **Rule card** (20 s), then Round 2 with all nudges | r2 | ~2.5 min |
+| Round 2 results, final leaderboard, Bias Mirror + badges on laptops | r2-reveal, final | ~45 s |
+
+## Tutorial rules (protects the experiment)
+The tutorial teaches the interface only: the map (raw materials → machines → Sell), numbers = units per hour,
+"Line makes" = what you sell per hour, clock and cash, offers at 00:00 / 08:00 / 16:00, 40-second timer, "if time
+runs out nothing is bought", discuss as a team, the sound toggle. It must **not** mention or hint at sunk cost,
+payback, bottlenecks, "the slowest machine", time left vs cost, or which choices are good. It uses a neutral
+practice factory, not Plant A or Plant B, and its practice decision does not count.
+
+## Nudges (8 total; Round 1 tag teams get #1 only; Round 2 everyone gets all)
+1. Payback tag · 2. Predict first · 3. Scrap button · 4. New Manager check · 5. Bottleneck glow (+ pile-ups, busy rings)
+6. **Money translation** (R2): each offer's effect is shown in dollars per hour, e.g. "Press 2: 10 → 14/hr = +$0/hr
+   (Freezer 3 still limits the line)". Mechanism: evaluability (Hsee 1996) — people can't evaluate units/hr, they can evaluate $.
+7. **Rule card** (R2): before the first Round 2 decision, the team commits to one rule (20 s, default "No rule"):
+   "Buy only if it earns its cost back before the shift ends" · "Always finish what we started" · "Spend as little as
+   possible" · "No rule". The chosen rule is shown on every Round 2 offer. Mechanism: implementation intentions
+   (Gollwitzer 1999), pre-commitment. Logged (server `rule`, CSV `rule_r2`); host shows how many teams picked each rule.
+8. **Ghost manager** (after each round): on the done screen, replay and Bias Mirror, a dashed "ghost manager" cash line
+   (perfect play) runs next to the team's own line, with the gap in dollars. Mechanism: counterfactual feedback.
+   Shown only after the team's round is over, never during play.
+
+## Fun layer (no effect on economics or the experiment)
+Synthesised sound effects with a mute toggle (click, coin, buy, scrap, last-5-seconds tick, round start, round complete,
+badge), 3-2-1 countdown at round start, coins popping from Sell during the simulation, confetti at round end and on the
+final podium, end-of-game badges on the Bias Mirror (e.g. Cold Blooded: scrapped every sunk-cost offer in Round 2;
+Bottleneck Hunter: took the good upgrade in both rounds; Oracle: every prediction right; Quick Draw: average decision
+under 10 s; Comeback: closer to perfect in Round 2 than Round 1; Perfect Shift: matched the ghost manager).

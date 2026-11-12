@@ -274,10 +274,12 @@
   }
 
   // Map of the factory as SVG. opts: target (machine id of the current offer), bumped, saving
-  function mapSVG(r, st, opts = {}) {
-    const round = ROUNDS[r];
+  function mapSVG(r, st, opts = {}) { return renderMap(ROUNDS[r], st, { ...opts, nudges: r === 1, key: 'r' + r }); }
+  // Generic renderer: any round-shaped object (machines/supplies/links/sell/price). Also used by the tutorial.
+  function renderMap(round, st, opts = {}) {
+    const r = opts.key || 'm';
     const fl = LM.flows(round, st);
-    const nudges = r === 1;                   // bottleneck glow + pile-ups are Round 2 nudges
+    const nudges = !!opts.nudges;             // bottleneck glow + pile-ups are Round 2 nudges
     const glow = nudges ? LM.bottleneckIds(round, st) : [];
     const pos = {};
     round.machines.forEach((m) => pos[m.id] = m);
@@ -333,10 +335,11 @@
     <div class="inspector hidden" id="inspector"></div>`;
   }
 
-  function wireMap(r, st) {
-    const round = ROUNDS[r];
+  function wireMap(r, st) { return wireMapRound(ROUNDS[r], st, r === 1, $('.mapwrap')); }
+  function wireMapRound(round, st, nudges, wrap) {
+    const r = nudges ? 1 : 0;
     const fl = LM.flows(round, st);
-    const box = $('#inspector'), wrap = $('.mapwrap');
+    const box = wrap.querySelector('.inspector');
     wrap.querySelectorAll('[data-node]').forEach((g) => g.addEventListener('click', (ev) => {
       ev.stopPropagation();
       const id = g.dataset.node;
@@ -353,9 +356,13 @@
       let left = rect.left - wr.left + rect.width / 2 - 110, top = rect.bottom - wr.top + 6;
       left = Math.max(8, Math.min(left, wr.width - 228)); if (top + 140 > wr.height) top = rect.top - wr.top - 140;
       box.style.left = left + 'px'; box.style.top = top + 'px';
+      wrap.dispatchEvent(new CustomEvent('lm:inspect', { detail: { id } }));
     }));
     wrap.addEventListener('click', () => box.classList.add('hidden'));
   }
+
+  // Shared with tutorial.js (and anything else that wants to draw a factory).
+  window.LMUI = { renderMap, wireMap: wireMapRound, icon, usd, esc };
 
   // cash at a given hour for a round, given choices
   function cashAt(r, hour) {
